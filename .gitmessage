@@ -1,0 +1,16 @@
+
+;
+; <type>(<scope>): <short summary> (50 chars max)
+;
+; Types: feat | fix | refactor | test | build | docs | style | chore
+; Scope: optional, e.g. parser, renderer, lexer, cmake, deps
+;
+; Body: explain WHY, not what (wrap at 72 chars)
+;
+;
+;
+; Footer: (optional)
+; Closes #<issue>
+; Breaking: <description>
+;
+;

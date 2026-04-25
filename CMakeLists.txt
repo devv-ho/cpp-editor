@@ -10,11 +10,17 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 include(FetchContent)
 
 FetchContent_Declare(
+  googletest
+  URL https://github.com/google/googletest/archive/03597a01ee50ed33e9dfd640b249b4be3799d395.zip
+)
+FetchContent_Declare(
   ftxui
   GIT_REPOSITORY https://github.com/ArthurSonzogni/ftxui
   GIT_TAG        main
 )
-FetchContent_MakeAvailable(ftxui)
+
+set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(googletest ftxui)
 
 # ── Layer targets ──────────────────────────────────────────────────────────────
 # Dependencies point inward only: drivers -> adapters -> core.
@@ -37,3 +43,18 @@ target_link_libraries(editor_drivers INTERFACE
 # ── Main executable ────────────────────────────────────────────────────────────
 add_executable(editor src/main.cpp)
 target_link_libraries(editor PRIVATE editor_drivers)
+
+# ── Unit tests ─────────────────────────────────────────────────────────────────
+enable_testing()
+include(GoogleTest)
+
+file(GLOB_RECURSE UNIT_TEST_SOURCES tests/unit/*.cpp)
+if(UNIT_TEST_SOURCES)
+  add_executable(unit_tests ${UNIT_TEST_SOURCES})
+  target_link_libraries(unit_tests PRIVATE
+    editor_core
+    GTest::gtest_main
+    GTest::gmock_main
+  )
+  gtest_discover_tests(unit_tests)
+endif()

@@ -67,6 +67,10 @@ public:
     pos_.col = len > 0 ? len - 1 : 0;
   }
 
+  /// Advance col by one — used after insert_char (insert mode allows col ==
+  /// len).
+  void advance_col() noexcept { ++pos_.col; }
+
   void set_position(Position pos) noexcept {
     pos_.line = std::min(pos.line, buffer_.line_count() - 1);
     pos_.col = pos.col;

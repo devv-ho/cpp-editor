@@ -1,6 +1,6 @@
-#include "core/entities/Position.hpp"
-
 #include <gtest/gtest.h>
+
+#include "core/entities/Position.hpp"
 
 using editor::core::Position;
 
@@ -28,7 +28,7 @@ TEST(PositionTest, CopyAssignmentIsIndependent) {
   Position b{};
   b = a;
   a.line = 99;
-  EXPECT_EQ(b.line, 2u); // b is unaffected by mutation of a
+  EXPECT_EQ(b.line, 2u);  // b is unaffected by mutation of a
 }
 
 TEST(PositionTest, EqualityHolds) {

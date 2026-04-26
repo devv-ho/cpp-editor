@@ -1,5 +1,3 @@
 #include <cstdlib>
 
-int main([[maybe_unused]] int argc, [[maybe_unused]] char *argv[]) {
-  return EXIT_SUCCESS;
-}
+int main([[maybe_unused]] int argc, [[maybe_unused]] char *argv[]) { return EXIT_SUCCESS; }

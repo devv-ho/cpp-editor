@@ -1,10 +1,10 @@
 #pragma once
 
-#include "Buffer.hpp"
-#include "Position.hpp"
-
 #include <algorithm>
 #include <cstddef>
+
+#include "Buffer.hpp"
+#include "Position.hpp"
 
 namespace editor::core {
 
@@ -15,7 +15,7 @@ namespace editor::core {
 /// Holds a reference to Buffer. Safe because Cursor is always a private member
 /// of Document, which also owns the Buffer — so Buffer always outlives Cursor.
 class Cursor {
-public:
+ public:
   explicit Cursor(const Buffer &buffer) : buffer_{buffer} {}
 
   // ── Queries ───────────────────────────────────────────────────────────────
@@ -27,14 +27,12 @@ public:
   // ── Motions ───────────────────────────────────────────────────────────────
 
   void move_left() noexcept {
-    if (pos_.col > 0)
-      --pos_.col;
+    if (pos_.col > 0) --pos_.col;
   }
 
   void move_right() noexcept {
     auto len = line_length(pos_.line);
-    if (pos_.col < len)
-      ++pos_.col;
+    if (pos_.col < len) ++pos_.col;
   }
 
   void move_up() noexcept {
@@ -75,7 +73,7 @@ public:
     clamp_col();
   }
 
-private:
+ private:
   const Buffer &buffer_;
   Position pos_{};
 
@@ -89,4 +87,4 @@ private:
   }
 };
 
-} // namespace editor::core
+}  // namespace editor::core

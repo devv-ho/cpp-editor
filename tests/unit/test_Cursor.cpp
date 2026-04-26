@@ -1,7 +1,7 @@
+#include <gtest/gtest.h>
+
 #include "core/entities/Buffer.hpp"
 #include "core/entities/Cursor.hpp"
-
-#include <gtest/gtest.h>
 
 using editor::core::Buffer;
 using editor::core::Cursor;
@@ -18,9 +18,7 @@ struct CursorFixture : ::testing::Test {
 // ── Initial state
 // ─────────────────────────────────────────────────────────────
 
-TEST_F(CursorFixture, InitialPositionIsOrigin) {
-  EXPECT_EQ(cur.position(), (Position{0, 0}));
-}
+TEST_F(CursorFixture, InitialPositionIsOrigin) { EXPECT_EQ(cur.position(), (Position{0, 0})); }
 
 // ── move_left / move_right
 // ────────────────────────────────────────────────────
@@ -43,8 +41,7 @@ TEST_F(CursorFixture, MoveLeftClampsAtSOL) {
 
 TEST_F(CursorFixture, MoveRightClampsAtLineLength) {
   // "hello" has length 5, col is allowed up to 5 (past last char)
-  for (int i = 0; i < 10; ++i)
-    cur.move_right();
+  for (int i = 0; i < 10; ++i) cur.move_right();
   EXPECT_EQ(cur.col(), 5u);
 }
 
@@ -75,16 +72,14 @@ TEST_F(CursorFixture, MoveUpClampsAtFirstLine) {
 }
 
 TEST_F(CursorFixture, MoveDownClampsAtLastLine) {
-  for (int i = 0; i < 10; ++i)
-    cur.move_down();
+  for (int i = 0; i < 10; ++i) cur.move_down();
   EXPECT_EQ(cur.line(), 2u);
 }
 
 TEST_F(CursorFixture, MoveDownClampsColToShorterLine) {
   // line 0: "hello" (len 5), line 2: "foo" (len 3)
   // move col to 5, then down twice — clamp_col clamps to len-1 on shorter line
-  for (int i = 0; i < 5; ++i)
-    cur.move_right();
+  for (int i = 0; i < 5; ++i) cur.move_right();
   cur.move_down();
   cur.move_down();
   EXPECT_EQ(cur.col(), 2u);
@@ -110,15 +105,14 @@ TEST_F(CursorFixture, MoveBottomGoesToLastLine) {
 // ───────────────────────────────────────────────────────
 
 TEST_F(CursorFixture, MoveSOLGoesToColZero) {
-  for (int i = 0; i < 3; ++i)
-    cur.move_right();
+  for (int i = 0; i < 3; ++i) cur.move_right();
   cur.move_sol();
   EXPECT_EQ(cur.col(), 0u);
 }
 
 TEST_F(CursorFixture, MoveEOLGoesToLastChar) {
   cur.move_eol();
-  EXPECT_EQ(cur.col(), 4u); // "hello" last char at col 4
+  EXPECT_EQ(cur.col(), 4u);  // "hello" last char at col 4
 }
 
 TEST_F(CursorFixture, MoveEOLOnEmptyLineStaysAtZero) {

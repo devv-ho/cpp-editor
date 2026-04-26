@@ -1,6 +1,6 @@
-#include "core/entities/Document.hpp"
-
 #include <gtest/gtest.h>
+
+#include "core/entities/Document.hpp"
 
 using editor::core::BufferError;
 using editor::core::Document;

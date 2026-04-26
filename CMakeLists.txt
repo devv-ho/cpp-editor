@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.20)
 project(Editor LANGUAGES CXX)
 
+# Generate compile_commands.json for IDE IntelliSense (clangd, VS Code)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 # ── Language standard ──────────────────────────────────────────────────────────
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

@@ -39,42 +39,25 @@ public:
   }
   [[nodiscard]] Cursor &cursor() noexcept { return cursor_; }
 
-  // ── Mutations ─────────────────────────────────────────────────────────────
+  // ── Buffer mutations ──────────────────────────────────────────────────────
+  // These only modify text. Cursor movement after a mutation is the
+  // responsibility of the command layer (EditorCommands).
 
-  [[nodiscard]] std::expected<void, BufferError> insert_char(char ch) {
-    auto result = buffer_.insert_char(cursor_.position(), ch);
-    if (result)
-      cursor_.advance_col();
-    return result;
+  [[nodiscard]] std::expected<void, BufferError> insert_char(Position pos,
+                                                             char ch) {
+    return buffer_.insert_char(pos, ch);
   }
 
-  /// Delete key: remove character at cursor position. Cursor does not move.
-  [[nodiscard]] std::expected<void, BufferError> delete_char() {
-    return buffer_.delete_char(cursor_.position());
+  [[nodiscard]] std::expected<void, BufferError> delete_char(Position pos) {
+    return buffer_.delete_char(pos);
   }
 
-  /// Backspace: move cursor left then delete the character to its left.
-  /// At col 0, joins the current line with the previous line.
-  [[nodiscard]] std::expected<void, BufferError> delete_char_before() {
-    if (cursor_.col() == 0) {
-      if (cursor_.line() == 0)
-        return std::unexpected(BufferError::LineOutOfRange);
-      const std::size_t prev_len =
-          buffer_.line_length(cursor_.line() - 1).value_or(0);
-      auto result = buffer_.join_with_prev(cursor_.position());
-      if (result)
-        cursor_.set_position({cursor_.line() - 1, prev_len});
-      return result;
-    }
-    cursor_.retreat_col();
-    return buffer_.delete_char(cursor_.position());
+  [[nodiscard]] std::expected<void, BufferError> join_with_prev(Position pos) {
+    return buffer_.join_with_prev(pos);
   }
 
-  [[nodiscard]] std::expected<void, BufferError> insert_newline() {
-    auto result = buffer_.insert_newline(cursor_.position());
-    if (result)
-      cursor_.set_position({cursor_.line() + 1, 0});
-    return result;
+  [[nodiscard]] std::expected<void, BufferError> insert_newline(Position pos) {
+    return buffer_.insert_newline(pos);
   }
 
   // ── Serialisation ─────────────────────────────────────────────────────────

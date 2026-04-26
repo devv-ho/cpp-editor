@@ -41,11 +41,11 @@ TEST_F(CursorFixture, MoveLeftClampsAtSOL) {
   EXPECT_EQ(cur.col(), 0u);
 }
 
-TEST_F(CursorFixture, MoveRightClampsAtEOL) {
-  // "hello" has length 5, max col in normal mode is 4
+TEST_F(CursorFixture, MoveRightClampsAtLineLength) {
+  // "hello" has length 5, col is allowed up to 5 (past last char)
   for (int i = 0; i < 10; ++i)
     cur.move_right();
-  EXPECT_EQ(cur.col(), 4u);
+  EXPECT_EQ(cur.col(), 5u);
 }
 
 TEST_F(CursorFixture, MoveRightOnEmptyLineStaysAtZero) {
@@ -81,9 +81,9 @@ TEST_F(CursorFixture, MoveDownClampsAtLastLine) {
 }
 
 TEST_F(CursorFixture, MoveDownClampsColToShorterLine) {
-  // line 0: "hello" (5), line 2: "foo" (3)
-  // move col to 4, then down twice — col should clamp to 2 on "foo"
-  for (int i = 0; i < 4; ++i)
+  // line 0: "hello" (len 5), line 2: "foo" (len 3)
+  // move col to 5, then down twice — clamp_col clamps to len-1 on shorter line
+  for (int i = 0; i < 5; ++i)
     cur.move_right();
   cur.move_down();
   cur.move_down();

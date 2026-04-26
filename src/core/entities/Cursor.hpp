@@ -24,7 +24,7 @@ public:
   [[nodiscard]] std::size_t line() const noexcept { return pos_.line; }
   [[nodiscard]] std::size_t col() const noexcept { return pos_.col; }
 
-  // ── Vim motions (normal mode) ─────────────────────────────────────────────
+  // ── Motions ───────────────────────────────────────────────────────────────
 
   void move_left() noexcept {
     if (pos_.col > 0)
@@ -33,8 +33,8 @@ public:
 
   void move_right() noexcept {
     auto len = line_length(pos_.line);
-    if (len > 0)
-      pos_.col = std::min(pos_.col + 1, len - 1);
+    if (pos_.col < len)
+      ++pos_.col;
   }
 
   void move_up() noexcept {
@@ -67,15 +67,6 @@ public:
   void move_eol() noexcept {
     auto len = line_length(pos_.line);
     pos_.col = len > 0 ? len - 1 : 0;
-  }
-
-  // ── Insert-mode positioning ───────────────────────────────────────────────
-
-  void advance_col() noexcept { ++pos_.col; }
-
-  void retreat_col() noexcept {
-    if (pos_.col > 0)
-      --pos_.col;
   }
 
   void set_position(Position pos) noexcept {

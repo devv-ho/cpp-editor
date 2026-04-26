@@ -25,75 +25,55 @@ TEST(DocumentTest, ConstructFromText) {
 // ── insert_char
 // ───────────────────────────────────────────────────────────────
 
-TEST(DocumentTest, InsertCharAppendsToCursor) {
-  Document doc{"ab"};
-  EXPECT_TRUE(doc.insert_char('x').has_value());
-  EXPECT_EQ(doc.line(0).value(), "xab");
+TEST(DocumentTest, InsertCharAtPosition) {
+  Document doc{"hllo"};
+  EXPECT_TRUE(doc.insert_char({0, 1}, 'e').has_value());
+  EXPECT_EQ(doc.line(0).value(), "hello");
 }
 
-TEST(DocumentTest, InsertCharAdvancesCursor) {
-  Document doc{""};
-  doc.insert_char('a');
-  doc.insert_char('b');
-  doc.insert_char('c');
-  EXPECT_EQ(doc.line(0).value(), "abc");
-}
-
-// ── delete_char (Delete key)
-// ──────────────────────────────────────────────────
-
-TEST(DocumentTest, DeleteCharRemovesAtCursor) {
+TEST(DocumentTest, InsertCharOutOfRangeReturnsError) {
   Document doc{"hello"};
-  EXPECT_TRUE(doc.delete_char().has_value());
+  EXPECT_EQ(doc.insert_char({5, 0}, 'x').error(), BufferError::LineOutOfRange);
+}
+
+// ── delete_char
+// ───────────────────────────────────────────────────────────────
+
+TEST(DocumentTest, DeleteCharAtPosition) {
+  Document doc{"hello"};
+  EXPECT_TRUE(doc.delete_char({0, 0}).has_value());
   EXPECT_EQ(doc.line(0).value(), "ello");
-}
-
-TEST(DocumentTest, DeleteCharDoesNotMoveCursor) {
-  Document doc{"hello"};
-  doc.delete_char();
-  EXPECT_EQ(doc.position(), (Position{0, 0}));
 }
 
 TEST(DocumentTest, DeleteCharOnEmptyLineReturnsError) {
   Document doc{""};
-  EXPECT_FALSE(doc.delete_char().has_value());
+  EXPECT_FALSE(doc.delete_char({0, 0}).has_value());
 }
 
-// ── delete_char_before (Backspace key) ───────────────────────────────────────
+// ── join_with_prev
+// ────────────────────────────────────────────────────────────
 
-TEST(DocumentTest, DeleteCharBeforeRemovesPrecedingChar) {
-  Document doc{"hello"};
-  doc.cursor().set_position({0, 3}); // cursor on 'l' (second)
-  EXPECT_TRUE(doc.delete_char_before().has_value());
-  EXPECT_EQ(doc.line(0).value(), "helo");
-  EXPECT_EQ(doc.position(), (Position{0, 2}));
-}
-
-TEST(DocumentTest, DeleteCharBeforeAtSOLJoinsWithPrevLine) {
+TEST(DocumentTest, JoinWithPrevMergesLines) {
   Document doc{"hello\nworld"};
-  doc.cursor().set_position({1, 0});
-  EXPECT_TRUE(doc.delete_char_before().has_value());
+  EXPECT_TRUE(doc.join_with_prev({1, 0}).has_value());
   EXPECT_EQ(doc.line_count(), 1u);
   EXPECT_EQ(doc.line(0).value(), "helloworld");
-  EXPECT_EQ(doc.position(), (Position{0, 5})); // end of former first line
 }
 
-TEST(DocumentTest, DeleteCharBeforeAtOriginReturnsError) {
+TEST(DocumentTest, JoinWithPrevOnFirstLineReturnsError) {
   Document doc{"hello"};
-  EXPECT_FALSE(doc.delete_char_before().has_value());
+  EXPECT_FALSE(doc.join_with_prev({0, 0}).has_value());
 }
 
 // ── insert_newline
 // ────────────────────────────────────────────────────────────
 
-TEST(DocumentTest, InsertNewlineSplitsLineAndMovesCursor) {
+TEST(DocumentTest, InsertNewlineSplitsLine) {
   Document doc{"helloworld"};
-  doc.cursor().set_position({0, 5});
-  EXPECT_TRUE(doc.insert_newline().has_value());
+  EXPECT_TRUE(doc.insert_newline({0, 5}).has_value());
   EXPECT_EQ(doc.line_count(), 2u);
   EXPECT_EQ(doc.line(0).value(), "hello");
   EXPECT_EQ(doc.line(1).value(), "world");
-  EXPECT_EQ(doc.position(), (Position{1, 0}));
 }
 
 // ── to_string

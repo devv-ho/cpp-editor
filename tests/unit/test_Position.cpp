@@ -16,6 +16,21 @@ TEST(PositionTest, AggregateInit) {
   EXPECT_EQ(p.col, 7u);
 }
 
+TEST(PositionTest, CopyConstructsCorrectly) {
+  Position a{2, 5};
+  Position b = a;
+  EXPECT_EQ(b.line, 2u);
+  EXPECT_EQ(b.col, 5u);
+}
+
+TEST(PositionTest, CopyAssignmentIsIndependent) {
+  Position a{2, 5};
+  Position b{};
+  b = a;
+  a.line = 99;
+  EXPECT_EQ(b.line, 2u); // b is unaffected by mutation of a
+}
+
 TEST(PositionTest, EqualityHolds) {
   EXPECT_EQ((Position{1, 2}), (Position{1, 2}));
   EXPECT_NE((Position{1, 2}), (Position{1, 3}));

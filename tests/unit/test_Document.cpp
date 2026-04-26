@@ -2,6 +2,7 @@
 
 #include <gtest/gtest.h>
 
+using editor::core::BufferError;
 using editor::core::Document;
 using editor::core::Position;
 
@@ -38,8 +39,8 @@ TEST(DocumentTest, InsertCharAdvancesCursor) {
   EXPECT_EQ(doc.line(0).value(), "abc");
 }
 
-// ── delete_char
-// ───────────────────────────────────────────────────────────────
+// ── delete_char (Delete key)
+// ──────────────────────────────────────────────────
 
 TEST(DocumentTest, DeleteCharRemovesAtCursor) {
   Document doc{"hello"};
@@ -47,9 +48,39 @@ TEST(DocumentTest, DeleteCharRemovesAtCursor) {
   EXPECT_EQ(doc.line(0).value(), "ello");
 }
 
+TEST(DocumentTest, DeleteCharDoesNotMoveCursor) {
+  Document doc{"hello"};
+  doc.delete_char();
+  EXPECT_EQ(doc.position(), (Position{0, 0}));
+}
+
 TEST(DocumentTest, DeleteCharOnEmptyLineReturnsError) {
   Document doc{""};
   EXPECT_FALSE(doc.delete_char().has_value());
+}
+
+// ── delete_char_before (Backspace key) ───────────────────────────────────────
+
+TEST(DocumentTest, DeleteCharBeforeRemovesPrecedingChar) {
+  Document doc{"hello"};
+  doc.cursor().set_position({0, 3}); // cursor on 'l' (second)
+  EXPECT_TRUE(doc.delete_char_before().has_value());
+  EXPECT_EQ(doc.line(0).value(), "helo");
+  EXPECT_EQ(doc.position(), (Position{0, 2}));
+}
+
+TEST(DocumentTest, DeleteCharBeforeAtSOLJoinsWithPrevLine) {
+  Document doc{"hello\nworld"};
+  doc.cursor().set_position({1, 0});
+  EXPECT_TRUE(doc.delete_char_before().has_value());
+  EXPECT_EQ(doc.line_count(), 1u);
+  EXPECT_EQ(doc.line(0).value(), "helloworld");
+  EXPECT_EQ(doc.position(), (Position{0, 5})); // end of former first line
+}
+
+TEST(DocumentTest, DeleteCharBeforeAtOriginReturnsError) {
+  Document doc{"hello"};
+  EXPECT_FALSE(doc.delete_char_before().has_value());
 }
 
 // ── insert_newline
@@ -74,7 +105,8 @@ TEST(DocumentTest, ToStringRoundTrips) {
   EXPECT_EQ(doc.to_string(), text);
 }
 
-// ── path ─────────────────────────────────────────────────────────────────────
+// ── path
+// ──────────────────────────────────────────────────────────────────────
 
 TEST(DocumentTest, PathDefaultsToEmpty) {
   Document doc;

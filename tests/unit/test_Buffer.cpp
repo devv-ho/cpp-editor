@@ -36,6 +36,22 @@ TEST(BufferTest, ConstructFromEmptyString) {
   EXPECT_TRUE(b.is_empty());
 }
 
+TEST(BufferTest, ConstructNormalisesCRLF) {
+  Buffer b{"foo\r\nbar\r\nbaz"};
+  EXPECT_EQ(b.line_count(), 3u);
+  EXPECT_EQ(b.line(0).value(), "foo");
+  EXPECT_EQ(b.line(1).value(), "bar");
+  EXPECT_EQ(b.line(2).value(), "baz");
+}
+
+TEST(BufferTest, ConstructMixedLFAndCRLF) {
+  Buffer b{"foo\nbar\r\nbaz"};
+  EXPECT_EQ(b.line_count(), 3u);
+  EXPECT_EQ(b.line(0).value(), "foo");
+  EXPECT_EQ(b.line(1).value(), "bar");
+  EXPECT_EQ(b.line(2).value(), "baz");
+}
+
 // ── Queries
 // ───────────────────────────────────────────────────────────────────
 
@@ -111,6 +127,21 @@ TEST(BufferTest, DeleteCharOutOfRangeColReturnsError) {
 TEST(BufferTest, DeleteCharOnEmptyLineReturnsError) {
   Buffer b{""};
   EXPECT_EQ(b.delete_char({0, 0}).error(), BufferError::ColOutOfRange);
+}
+
+// ── join_with_prev
+// ────────────────────────────────────────────────────────────
+
+TEST(BufferTest, JoinWithPrevMergesLines) {
+  Buffer b{"hello\nworld"};
+  EXPECT_TRUE(b.join_with_prev({1, 0}).has_value());
+  EXPECT_EQ(b.line_count(), 1u);
+  EXPECT_EQ(b.line(0).value(), "helloworld");
+}
+
+TEST(BufferTest, JoinWithPrevOnFirstLineReturnsError) {
+  Buffer b{"hello"};
+  EXPECT_EQ(b.join_with_prev({0, 0}).error(), BufferError::LineOutOfRange);
 }
 
 // ── insert_newline

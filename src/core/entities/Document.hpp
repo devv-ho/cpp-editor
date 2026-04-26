@@ -6,6 +6,7 @@
 
 #include <expected>
 #include <filesystem>
+#include <string>
 #include <string_view>
 
 namespace editor::core {
@@ -15,12 +16,16 @@ namespace editor::core {
 /// Buffer or Cursor directly.
 class Document {
 public:
+  // string_view: a non-owning read-only reference to a string.
+  // Cheaper than std::string for construction — no heap allocation for the
+  // parameter itself. The Buffer constructor copies the content internally.
   explicit Document(std::string_view text = "")
       : buffer_{text}, cursor_{buffer_} {}
 
   // ── Buffer access ─────────────────────────────────────────────────────────
 
   [[nodiscard]] const Buffer &buffer() const noexcept { return buffer_; }
+
   [[nodiscard]] std::size_t line_count() const noexcept {
     return buffer_.line_count();
   }
@@ -46,7 +51,25 @@ public:
     return result;
   }
 
+  /// Delete key: remove character at cursor position. Cursor does not move.
   [[nodiscard]] std::expected<void, BufferError> delete_char() {
+    return buffer_.delete_char(cursor_.position());
+  }
+
+  /// Backspace: move cursor left then delete the character to its left.
+  /// At col 0, joins the current line with the previous line.
+  [[nodiscard]] std::expected<void, BufferError> delete_char_before() {
+    if (cursor_.col() == 0) {
+      if (cursor_.line() == 0)
+        return std::unexpected(BufferError::LineOutOfRange);
+      const std::size_t prev_len =
+          buffer_.line_length(cursor_.line() - 1).value_or(0);
+      auto result = buffer_.join_with_prev(cursor_.position());
+      if (result)
+        cursor_.set_position({cursor_.line() - 1, prev_len});
+      return result;
+    }
+    cursor_.retreat_col();
     return buffer_.delete_char(cursor_.position());
   }
 
@@ -63,6 +86,8 @@ public:
 
   // ── File path ─────────────────────────────────────────────────────────────
 
+  // Stored here so FileService and LspService can refer to the file without
+  // passing the path separately through every call.
   void set_path(std::filesystem::path path) noexcept {
     path_ = std::move(path);
   }

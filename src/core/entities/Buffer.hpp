@@ -2,7 +2,9 @@
 
 #include "Position.hpp"
 
+#include <algorithm>
 #include <expected>
+#include <ranges>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -22,17 +24,18 @@ public:
   Buffer() : lines_{""} {}
 
   explicit Buffer(std::string_view text) {
-    lines_.clear();
-    std::size_t start = 0;
-    while (true) {
-      auto end = text.find('\n', start);
-      if (end == std::string_view::npos) {
-        lines_.emplace_back(text.substr(start));
-        break;
-      }
-      lines_.emplace_back(text.substr(start, end - start));
-      start = end + 1;
+    // Strip CRLF: normalise \r\n to \n before splitting.
+    std::string normalised;
+    normalised.reserve(text.size());
+    for (std::size_t i = 0; i < text.size(); ++i) {
+      if (text[i] == '\r' && i + 1 < text.size() && text[i + 1] == '\n')
+        continue;
+      normalised += text[i];
     }
+
+    for (const auto &part : normalised | std::views::split('\n'))
+      lines_.emplace_back(part.begin(), part.end());
+
     if (lines_.empty())
       lines_.emplace_back("");
   }
@@ -94,7 +97,19 @@ public:
     return {};
   }
 
-  /// Split the current line at pos, inserting a new line below.
+  /// Join the previous line with the current line — triggered by backspace at
+  /// col 0.
+  [[nodiscard]] std::expected<void, BufferError> join_with_prev(Position pos) {
+    if (pos.line == 0)
+      return std::unexpected(BufferError::LineOutOfRange);
+    if (pos.line >= lines_.size())
+      return std::unexpected(BufferError::LineOutOfRange);
+    lines_[pos.line - 1] += lines_[pos.line];
+    lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(pos.line));
+    return {};
+  }
+
+  /// Split the current line at pos — triggered by Enter in insert mode.
   [[nodiscard]] std::expected<void, BufferError> insert_newline(Position pos) {
     if (pos.line >= lines_.size())
       return std::unexpected(BufferError::LineOutOfRange);
@@ -109,6 +124,8 @@ public:
   }
 
 private:
+  // Invariant: lines_ is never empty. Default and text constructors both
+  // guarantee at least one element.
   std::vector<std::string> lines_;
 };
 

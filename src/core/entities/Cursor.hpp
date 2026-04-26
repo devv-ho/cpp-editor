@@ -31,8 +31,6 @@ public:
       --pos_.col;
   }
 
-  // In normal mode the cursor sits *on* a character — max valid col is len-1.
-  // This is intentionally different from advance_col used in insert mode.
   void move_right() noexcept {
     auto len = line_length(pos_.line);
     if (len > 0)
@@ -73,11 +71,8 @@ public:
 
   // ── Insert-mode positioning ───────────────────────────────────────────────
 
-  // Insert mode allows col == len (cursor sits *after* last character).
-  // move_right clamps to len-1 (normal mode) so it cannot be used here.
   void advance_col() noexcept { ++pos_.col; }
 
-  // Backspace moves the cursor left before the deletion happens.
   void retreat_col() noexcept {
     if (pos_.col > 0)
       --pos_.col;

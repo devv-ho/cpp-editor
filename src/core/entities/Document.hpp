@@ -16,9 +16,6 @@ namespace editor::core {
 /// Buffer or Cursor directly.
 class Document {
 public:
-  // string_view: a non-owning read-only reference to a string.
-  // Cheaper than std::string for construction — no heap allocation for the
-  // parameter itself. The Buffer constructor copies the content internally.
   explicit Document(std::string_view text = "")
       : buffer_{text}, cursor_{buffer_} {}
 
@@ -86,8 +83,6 @@ public:
 
   // ── File path ─────────────────────────────────────────────────────────────
 
-  // Stored here so FileService and LspService can refer to the file without
-  // passing the path separately through every call.
   void set_path(std::filesystem::path path) noexcept {
     path_ = std::move(path);
   }

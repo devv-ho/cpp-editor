@@ -1,142 +1,139 @@
-#include "core/entities/Buffer.hpp"
-#include "core/entities/Cursor.hpp"
+// Unit tests for Cursor.
 
 #include <gtest/gtest.h>
+
+#include "core/entities/Buffer.hpp"
+#include "core/entities/Cursor.hpp"
 
 using editor::core::Buffer;
 using editor::core::Cursor;
 using editor::core::Position;
 
-// ── Helpers
-// ───────────────────────────────────────────────────────────────────
+// -- Helpers ------------------------------------------------------------------
 
 struct CursorFixture : ::testing::Test {
-  Buffer buf{"hello\nworld\nfoo"};
-  Cursor cur{buf};
+    Buffer buf_ = Buffer::from_text("hello\nworld\nfoo").value();
+    Cursor cur_{buf_};
 };
 
-// ── Initial state
-// ─────────────────────────────────────────────────────────────
+// -- Initial state ------------------------------------------------------------
 
-TEST_F(CursorFixture, InitialPositionIsOrigin) {
-  EXPECT_EQ(cur.position(), (Position{0, 0}));
-}
+TEST_F(CursorFixture, InitialPositionIsOrigin) { EXPECT_EQ(cur_.position(), (Position{0, 0})); }
 
-// ── move_left / move_right
-// ────────────────────────────────────────────────────
+// -- move_left / move_right ---------------------------------------------------
 
 TEST_F(CursorFixture, MoveRightAdvancesCol) {
-  cur.move_right();
-  EXPECT_EQ(cur.col(), 1u);
+    cur_.move_right();
+    EXPECT_EQ(cur_.col(), 1u);
 }
 
 TEST_F(CursorFixture, MoveLeftDecrementsCol) {
-  cur.move_right();
-  cur.move_left();
-  EXPECT_EQ(cur.col(), 0u);
+    cur_.move_right();
+    cur_.move_left();
+    EXPECT_EQ(cur_.col(), 0u);
 }
 
 TEST_F(CursorFixture, MoveLeftClampsAtSOL) {
-  cur.move_left();
-  EXPECT_EQ(cur.col(), 0u);
+    cur_.move_left();
+    EXPECT_EQ(cur_.col(), 0u);
 }
 
 TEST_F(CursorFixture, MoveRightClampsAtLineLength) {
-  // "hello" has length 5, col is allowed up to 5 (past last char)
-  for (int i = 0; i < 10; ++i)
-    cur.move_right();
-  EXPECT_EQ(cur.col(), 5u);
+    // "hello" has length 5, col is allowed up to 5 (past last char)
+    for (int i = 0; i < 10; ++i) {
+        cur_.move_right();
+    }
+    EXPECT_EQ(cur_.col(), 5u);
 }
 
 TEST_F(CursorFixture, MoveRightOnEmptyLineStaysAtZero) {
-  Buffer empty{""};
-  Cursor c{empty};
-  c.move_right();
-  EXPECT_EQ(c.col(), 0u);
+    Buffer empty = Buffer::from_text("").value();
+    Cursor c{empty};
+    c.move_right();
+    EXPECT_EQ(c.col(), 0u);
 }
 
-// ── move_up / move_down
-// ───────────────────────────────────────────────────────
+// -- move_up / move_down ------------------------------------------------------
 
 TEST_F(CursorFixture, MoveDownAdvancesLine) {
-  cur.move_down();
-  EXPECT_EQ(cur.line(), 1u);
+    cur_.move_down();
+    EXPECT_EQ(cur_.line(), 1u);
 }
 
 TEST_F(CursorFixture, MoveUpDecrementsLine) {
-  cur.move_down();
-  cur.move_up();
-  EXPECT_EQ(cur.line(), 0u);
+    cur_.move_down();
+    cur_.move_up();
+    EXPECT_EQ(cur_.line(), 0u);
 }
 
 TEST_F(CursorFixture, MoveUpClampsAtFirstLine) {
-  cur.move_up();
-  EXPECT_EQ(cur.line(), 0u);
+    cur_.move_up();
+    EXPECT_EQ(cur_.line(), 0u);
 }
 
 TEST_F(CursorFixture, MoveDownClampsAtLastLine) {
-  for (int i = 0; i < 10; ++i)
-    cur.move_down();
-  EXPECT_EQ(cur.line(), 2u);
+    for (int i = 0; i < 10; ++i) {
+        cur_.move_down();
+    }
+    EXPECT_EQ(cur_.line(), 2u);
 }
 
 TEST_F(CursorFixture, MoveDownClampsColToShorterLine) {
-  // line 0: "hello" (len 5), line 2: "foo" (len 3)
-  // move col to 5, then down twice — clamp_col clamps to len-1 on shorter line
-  for (int i = 0; i < 5; ++i)
-    cur.move_right();
-  cur.move_down();
-  cur.move_down();
-  EXPECT_EQ(cur.col(), 2u);
+    // line 0: "hello" (len 5), line 2: "foo" (len 3)
+    // move col to 5, then down twice -- clamp_col clamps to len-1 on shorter line
+    for (int i = 0; i < 5; ++i) {
+        cur_.move_right();
+    }
+    cur_.move_down();
+    cur_.move_down();
+    EXPECT_EQ(cur_.col(), 2u);
 }
 
-// ── move_top / move_bottom
-// ────────────────────────────────────────────────────
+// -- move_top / move_bottom ---------------------------------------------------
 
 TEST_F(CursorFixture, MoveTopGoesToOrigin) {
-  cur.move_down();
-  cur.move_right();
-  cur.move_top();
-  EXPECT_EQ(cur.position(), (Position{0, 0}));
+    cur_.move_down();
+    cur_.move_right();
+    cur_.move_top();
+    EXPECT_EQ(cur_.position(), (Position{0, 0}));
 }
 
 TEST_F(CursorFixture, MoveBottomGoesToLastLine) {
-  cur.move_bottom();
-  EXPECT_EQ(cur.line(), 2u);
-  EXPECT_EQ(cur.col(), 0u);
+    cur_.move_bottom();
+    EXPECT_EQ(cur_.line(), 2u);
+    EXPECT_EQ(cur_.col(), 0u);
 }
 
-// ── move_sol / move_eol
-// ───────────────────────────────────────────────────────
+// -- move_sol / move_eol ------------------------------------------------------
 
 TEST_F(CursorFixture, MoveSOLGoesToColZero) {
-  for (int i = 0; i < 3; ++i)
-    cur.move_right();
-  cur.move_sol();
-  EXPECT_EQ(cur.col(), 0u);
+    for (int i = 0; i < 3; ++i) {
+        cur_.move_right();
+    }
+    cur_.move_sol();
+    EXPECT_EQ(cur_.col(), 0u);
 }
 
 TEST_F(CursorFixture, MoveEOLGoesToLastChar) {
-  cur.move_eol();
-  EXPECT_EQ(cur.col(), 4u); // "hello" last char at col 4
+    cur_.move_eol();
+    EXPECT_EQ(cur_.col(), 4u);  // "hello" last char at col 4
 }
 
 TEST_F(CursorFixture, MoveEOLOnEmptyLineStaysAtZero) {
-  Buffer empty{""};
-  Cursor c{empty};
-  c.move_eol();
-  EXPECT_EQ(c.col(), 0u);
+    Buffer empty = Buffer::from_text("").value();
+    Cursor c{empty};
+    c.move_eol();
+    EXPECT_EQ(c.col(), 0u);
 }
 
-// ── set_position
-// ──────────────────────────────────────────────────────────────
+// -- set_position -------------------------------------------------------------
 
 TEST_F(CursorFixture, SetPositionClampsOutOfRangeLine) {
-  cur.set_position({99, 0});
-  EXPECT_EQ(cur.line(), 2u);
+    cur_.set_position({99, 0});
+    EXPECT_EQ(cur_.line(), 2u);
 }
 
 TEST_F(CursorFixture, SetPositionClampsOutOfRangeCol) {
-  cur.set_position({0, 99});
-  EXPECT_EQ(cur.col(), 4u);
+    cur_.set_position({0, 99});
+    EXPECT_EQ(cur_.col(), 4u);
 }

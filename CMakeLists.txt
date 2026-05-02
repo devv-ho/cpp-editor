@@ -33,7 +33,7 @@ target_include_directories(editor_core INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/src
 target_compile_features(editor_core INTERFACE cxx_std_23)
 
 add_library(editor_adapters INTERFACE)
-target_link_libraries(editor_adapters INTERFACE editor_core)
+target_link_libraries(editor_adapters INTERFACE editor_core ftxui::component)
 
 add_library(editor_drivers INTERFACE)
 target_link_libraries(editor_drivers INTERFACE
@@ -55,6 +55,8 @@ file(GLOB_RECURSE UNIT_TEST_SOURCES tests/unit/*.cpp)
 if(UNIT_TEST_SOURCES)
   add_executable(unit_tests ${UNIT_TEST_SOURCES})
   target_link_libraries(unit_tests PRIVATE
+    editor_adapters
+    ftxui::component
     editor_core
     GTest::gtest_main
     GTest::gmock_main

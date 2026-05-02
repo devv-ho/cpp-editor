@@ -248,20 +248,15 @@ TEST(InputDispatcherTest, GFollowedByNonGClearsPending) {
 TEST(InputDispatcherTest, DispatchCharInsertsInInsertMode) {
     Document doc{"hllo"};
     InputDispatcher d;
-    d.dispatch(Key::i, doc);  // insert mode
-    d.dispatch(Key::l, doc);  // l is a Key -- but in insert mode routes to insert_key
-    // Use dispatch_char for printable chars
-    Document doc2{"hllo"};
-    InputDispatcher d2;
-    d2.dispatch(Key::i, doc2);
-    d2.dispatch_char('e', doc2);
-    EXPECT_EQ(doc2.line(0).value(), "ehllo");
+    d.dispatch(Key::i, doc);
+    d.dispatch('e', doc);
+    EXPECT_EQ(doc.line(0).value(), "ehllo");
 }
 
 TEST(InputDispatcherTest, DispatchCharIgnoredInNormalMode) {
     Document doc{"hello"};
     InputDispatcher d;
-    d.dispatch_char('x', doc);
+    d.dispatch('x', doc);
     EXPECT_EQ(doc.line(0).value(), "hello");
 }
 

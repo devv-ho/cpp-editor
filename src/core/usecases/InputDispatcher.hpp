@@ -26,8 +26,9 @@ public:
         return mode_;
     }
 
-    // Handles raw printable characters in insert mode (ignored in normal mode).
-    EditorMode dispatch_char(char ch, Document& doc) {
+    // Overload for raw printable characters. Key only covers named keys; printable
+    // text typed in insert mode arrives as char and bypasses the Key enum entirely.
+    EditorMode dispatch(char ch, Document& doc) {
         if (mode_ == EditorMode::Insert) {
             commands::insert_char(doc, ch);
         }

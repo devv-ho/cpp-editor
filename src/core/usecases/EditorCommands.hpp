@@ -55,6 +55,7 @@ inline void move_eol(Document& doc) { doc.cursor().move_eol(); }
 
 // -- Mode transitions ---------------------------------------------------------
 
+// 'i' enters insert mode at the current position -- no cursor movement needed.
 inline void enter_insert(Document& doc) { (void)doc; }
 
 inline void enter_insert_after(Document& doc) {

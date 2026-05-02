@@ -44,3 +44,8 @@ TEST(PositionTest, SpaceshipOrdersByLineThenCol) {
     EXPECT_LT((Position{1, 0}), (Position{1, 1}));
     EXPECT_GT((Position{2, 0}), (Position{1, 9}));
 }
+
+TEST(PositionTest, ToStringFormat) {
+    EXPECT_EQ((Position{0, 0}.to_string()), "(0, 0)");
+    EXPECT_EQ((Position{3, 7}.to_string()), "(3, 7)");
+}

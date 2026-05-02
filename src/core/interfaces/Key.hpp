@@ -5,19 +5,19 @@
 namespace editor::core {
 
 enum class Key {
-    H,
-    J,
-    K,
-    L,
-    G_lower,  // g
-    G_upper,  // G
-    Dollar,   // $
-    Zero,     // 0
-    I,
-    A,
-    Escape,
-    Backspace,
-    Return,
+    h,
+    j,
+    k,
+    l,
+    g,
+    G,
+    dollar,
+    zero,
+    i,
+    a,
+    escape,
+    backspace,
+    enter,
 };
 
 }  // namespace editor::core

@@ -11,13 +11,13 @@ namespace editor::adapters {
 
 [[nodiscard]] inline std::optional<editor::core::Key> translate(const ftxui::Event& event) {
     if (event == ftxui::Event::Escape) {
-        return core::Key::Escape;
+        return core::Key::escape;
     }
     if (event == ftxui::Event::Backspace) {
-        return core::Key::Backspace;
+        return core::Key::backspace;
     }
     if (event == ftxui::Event::Return) {
-        return core::Key::Return;
+        return core::Key::enter;
     }
 
     if (!event.is_character()) {
@@ -26,34 +26,34 @@ namespace editor::adapters {
 
     const std::string& ch = event.character();
     if (ch == "h") {
-        return core::Key::H;
+        return core::Key::h;
     }
     if (ch == "j") {
-        return core::Key::J;
+        return core::Key::j;
     }
     if (ch == "k") {
-        return core::Key::K;
+        return core::Key::k;
     }
     if (ch == "l") {
-        return core::Key::L;
+        return core::Key::l;
     }
     if (ch == "g") {
-        return core::Key::G_lower;
+        return core::Key::g;
     }
     if (ch == "G") {
-        return core::Key::G_upper;
+        return core::Key::G;
     }
     if (ch == "$") {
-        return core::Key::Dollar;
+        return core::Key::dollar;
     }
     if (ch == "0") {
-        return core::Key::Zero;
+        return core::Key::zero;
     }
     if (ch == "i") {
-        return core::Key::I;
+        return core::Key::i;
     }
     if (ch == "a") {
-        return core::Key::A;
+        return core::Key::a;
     }
 
     return std::nullopt;

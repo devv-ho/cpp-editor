@@ -19,7 +19,13 @@ namespace editor::core {
 class Document {
 public:
     explicit Document(std::string_view text = "")
-        : buffer_{Buffer::from_text(text).value_or(Buffer{})}, cursor_{buffer_} {}
+        : buffer_{Buffer::from_text(text)}, cursor_{buffer_} {}
+
+    // Cursor holds const Buffer& into this object. Copy/move would dangle it.
+    Document(const Document&) = delete;
+    Document& operator=(const Document&) = delete;
+    Document(Document&&) = delete;
+    Document& operator=(Document&&) = delete;
 
     // -- Buffer access ---------------------------------------------------------
 

@@ -29,7 +29,7 @@ public:
     Buffer() : lines_{""} {}
 
     // Creates a Buffer from text, normalising CRLF to LF.
-    [[nodiscard]] static std::expected<Buffer, BufferError> from_text(std::string_view text) {
+    [[nodiscard]] static Buffer from_text(std::string_view text) {
         Buffer buf;
         buf.lines_.clear();
 
@@ -46,6 +46,7 @@ public:
             buf.lines_.emplace_back(part.begin(), part.end());
         }
 
+        // std::views::split on an empty string yields 0 subranges on libstdc++ C++23.
         if (buf.lines_.empty()) {
             buf.lines_.emplace_back("");
         }

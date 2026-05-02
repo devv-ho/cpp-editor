@@ -12,7 +12,7 @@ using editor::core::Position;
 // -- Helpers ------------------------------------------------------------------
 
 struct CursorFixture : ::testing::Test {
-    Buffer buf_ = Buffer::from_text("hello\nworld\nfoo").value();
+    Buffer buf_ = Buffer::from_text("hello\nworld\nfoo");
     Cursor cur_{buf_};
 };
 
@@ -47,7 +47,7 @@ TEST_F(CursorFixture, MoveRightClampsAtLineLength) {
 }
 
 TEST_F(CursorFixture, MoveRightOnEmptyLineStaysAtZero) {
-    Buffer empty = Buffer::from_text("").value();
+    Buffer empty = Buffer::from_text("");
     Cursor c{empty};
     c.move_right();
     EXPECT_EQ(c.col(), 0u);
@@ -120,7 +120,7 @@ TEST_F(CursorFixture, MoveEOLGoesToLastChar) {
 }
 
 TEST_F(CursorFixture, MoveEOLOnEmptyLineStaysAtZero) {
-    Buffer empty = Buffer::from_text("").value();
+    Buffer empty = Buffer::from_text("");
     Cursor c{empty};
     c.move_eol();
     EXPECT_EQ(c.col(), 0u);

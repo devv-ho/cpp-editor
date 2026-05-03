@@ -16,6 +16,7 @@
 #include <string>
 #include <string_view>
 
+#include "adapters/lsp/LspConstants.hpp"
 #include "adapters/lsp/LspMessage.hpp"
 
 namespace editor::adapters::lsp {
@@ -50,10 +51,6 @@ public:
     }
 
 private:
-    // Both constants are prescribed by the LSP Base Protocol spec (see file header).
-    static constexpr std::string_view kContentLengthPrefix = "Content-Length: ";
-    static constexpr std::string_view kHeaderSep = "\r\n\r\n";
-
     std::string buf_;
 
     // Parses the Content-Length value from the header, or nullopt if not yet present.

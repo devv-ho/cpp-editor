@@ -1,10 +1,8 @@
 // Defines LspEncoder -- serialises outgoing LSP messages to JSON-RPC 2.0 wire format.
 //
 // Wire format: "Content-Length: N\r\n\r\n" followed by N bytes of UTF-8 JSON.
-// Header field names, CRLF line endings, and JSON-RPC field names (jsonrpc/id/method/params)
-// are all mandated by the LSP Base Protocol and JSON-RPC 2.0 specs:
-//   https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#baseProtocol
-//   https://www.jsonrpc.org/specification
+// JSON-RPC field names (jsonrpc/id/method/params) are mandated by
+// https://www.jsonrpc.org/specification
 
 #pragma once
 
@@ -12,6 +10,8 @@
 #include <nlohmann/json.hpp>
 #include <string>
 #include <string_view>
+
+#include "adapters/lsp/LspConstants.hpp"
 
 namespace editor::adapters::lsp {
 
@@ -25,7 +25,7 @@ namespace editor::adapters::lsp {
         {"params", params},
     };
     std::string payload = body.dump();
-    return std::format("Content-Length: {}\r\n\r\n{}", payload.size(), payload);
+    return std::format("{}{}{}{}", kContentLengthPrefix, payload.size(), kHeaderSep, payload);
 }
 
 // Encodes a JSON-RPC notification (no id -- server must not reply).
@@ -37,7 +37,7 @@ namespace editor::adapters::lsp {
         {"params", params},
     };
     std::string payload = body.dump();
-    return std::format("Content-Length: {}\r\n\r\n{}", payload.size(), payload);
+    return std::format("{}{}{}{}", kContentLengthPrefix, payload.size(), kHeaderSep, payload);
 }
 
 }  // namespace editor::adapters::lsp

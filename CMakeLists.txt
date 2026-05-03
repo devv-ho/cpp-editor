@@ -36,8 +36,12 @@ add_library(editor_core INTERFACE)
 target_include_directories(editor_core INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_compile_features(editor_core INTERFACE cxx_std_23)
 
-add_library(editor_adapters INTERFACE)
-target_link_libraries(editor_adapters INTERFACE editor_core ftxui::component nlohmann_json::nlohmann_json)
+add_library(editor_adapters STATIC
+  src/adapters/lsp/ClangdProcess.cpp
+)
+target_include_directories(editor_adapters PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_compile_features(editor_adapters PUBLIC cxx_std_23)
+target_link_libraries(editor_adapters PUBLIC editor_core ftxui::component nlohmann_json::nlohmann_json)
 
 add_library(editor_drivers INTERFACE)
 target_link_libraries(editor_drivers INTERFACE

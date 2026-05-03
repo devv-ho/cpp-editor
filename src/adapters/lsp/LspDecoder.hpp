@@ -2,6 +2,11 @@
 //
 // Feed raw bytes from the subprocess stdout via feed(). Call next_message()
 // repeatedly until it returns std::nullopt to drain all complete messages.
+//
+// Wire format is specified by the LSP Base Protocol:
+// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#baseProtocol
+// Header field names, CRLF line endings, and the \r\n\r\n header terminator are
+// all mandated there, not invented here.
 
 #pragma once
 
@@ -27,13 +32,13 @@ public:
             return std::nullopt;
         }
 
-        // Header ends at the first \r\n\r\n.
-        auto header_end = buf_.find("\r\n\r\n");
+        auto header_end = buf_.find(kHeaderSep);
         if (header_end == std::string::npos) {
             return std::nullopt;
         }
 
-        std::size_t body_start = header_end + 4;
+        std::size_t body_start = header_end + kHeaderSep.size();
+        // Guard: body bytes may not have arrived yet (partial read from the pipe).
         if (buf_.size() < body_start + *content_length) {
             return std::nullopt;
         }
@@ -45,16 +50,19 @@ public:
     }
 
 private:
+    // Both constants are prescribed by the LSP Base Protocol spec (see file header).
+    static constexpr std::string_view kContentLengthPrefix = "Content-Length: ";
+    static constexpr std::string_view kHeaderSep = "\r\n\r\n";
+
     std::string buf_;
 
     // Parses the Content-Length value from the header, or nullopt if not yet present.
     std::optional<std::size_t> parse_content_length() const {
-        const std::string_view prefix = "Content-Length: ";
-        auto pos = buf_.find(prefix);
+        auto pos = buf_.find(kContentLengthPrefix);
         if (pos == std::string::npos) {
             return std::nullopt;
         }
-        auto value_start = pos + prefix.size();
+        auto value_start = pos + kContentLengthPrefix.size();
         auto line_end = buf_.find("\r\n", value_start);
         if (line_end == std::string::npos) {
             return std::nullopt;

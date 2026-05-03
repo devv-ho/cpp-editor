@@ -58,6 +58,7 @@ inline void move_eol(Document& doc) { doc.cursor().move_eol(); }
 // 'i' enters insert mode at the current position -- no cursor movement needed.
 inline void enter_insert(Document& doc) { (void)doc; }
 
+// 'a' enters insert mode one position after the cursor (vim's append).
 inline void enter_insert_after(Document& doc) {
     auto& cursor = doc.cursor();
     std::size_t len = doc.buffer().line_length(cursor.line()).value_or(0);
@@ -66,6 +67,7 @@ inline void enter_insert_after(Document& doc) {
     }
 }
 
+// ESC returns to normal mode; clamps col to len-1 (normal mode ceiling).
 inline void enter_normal(Document& doc) { clamp_normal(doc); }
 
 // -- Insert mode edits --------------------------------------------------------

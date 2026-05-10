@@ -104,7 +104,7 @@ void LspService::handle_diagnostics(const nlohmann::json& params) {
         diag.line = d["range"]["start"]["line"].get<std::size_t>();
         diag.col = d["range"]["start"]["character"].get<std::size_t>();
         diag.message = d["message"].get<std::string>();
-        diag.severity = d.value("severity", 1);
+        diag.severity = d.value("severity", DiagnosticSeverity::kError);
         diags.push_back(std::move(diag));
     }
 

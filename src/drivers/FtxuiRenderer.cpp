@@ -97,12 +97,16 @@ ftxui::Element FtxuiRenderer::render_diagnostics() const {
 
     std::vector<ftxui::Element> items;
     for (const auto& d : diags) {
-        std::string severity = d.severity == 1 ? "E" : d.severity == 2 ? "W" : "I";
-        std::string label = "[" + severity + "] " + std::to_string(d.line + 1) + ":" +
+        std::string sev_label = d.severity == core::DiagnosticSeverity::kError     ? "E"
+                                : d.severity == core::DiagnosticSeverity::kWarning ? "W"
+                                : d.severity == core::DiagnosticSeverity::kHint    ? "H"
+                                                                                   : "I";
+        std::string label = "[" + sev_label + "] " + std::to_string(d.line + 1) + ":" +
                             std::to_string(d.col + 1) + "  " + d.message;
-        auto color = d.severity == 1   ? ftxui::color(ftxui::Color::Red)
-                     : d.severity == 2 ? ftxui::color(ftxui::Color::Yellow)
-                                       : ftxui::color(ftxui::Color::Cyan);
+        auto color =
+            d.severity == core::DiagnosticSeverity::kError     ? ftxui::color(ftxui::Color::Red)
+            : d.severity == core::DiagnosticSeverity::kWarning ? ftxui::color(ftxui::Color::Yellow)
+                                                               : ftxui::color(ftxui::Color::Cyan);
         items.push_back(ftxui::text(label) | color);
     }
     return ftxui::vbox(std::move(items));

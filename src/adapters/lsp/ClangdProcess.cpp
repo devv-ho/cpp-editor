@@ -21,10 +21,10 @@ constexpr int kWriteEnd = 1;
 constexpr pid_t kChildPid = 0;
 
 ClangdProcess::ClangdProcess(std::string_view clangd_path) {
-    std::array<int, 2> editor_to_clangd{};
-    std::array<int, 2> clangd_to_editor{};
+    std::array<int, 2> to_child{};
+    std::array<int, 2> from_child{};
 
-    if (pipe(editor_to_clangd.data()) != 0 || pipe(clangd_to_editor.data()) != 0) {
+    if (pipe(to_child.data()) != 0 || pipe(from_child.data()) != 0) {
         throw std::runtime_error(std::string("pipe: ") + strerror(errno));
     }
 
@@ -39,13 +39,13 @@ ClangdProcess::ClangdProcess(std::string_view clangd_path) {
         // then exec clangd. Everything below this block is parent-only because
         // execvp replaces this process entirely; _exit(1) is the fallback if
         // execvp fails -- execution never falls through to the parent code.
-        dup2(editor_to_clangd[kReadEnd], STDIN_FILENO);
-        dup2(clangd_to_editor[kWriteEnd], STDOUT_FILENO);
+        dup2(to_child[kReadEnd], STDIN_FILENO);
+        dup2(from_child[kWriteEnd], STDOUT_FILENO);
 
-        close(editor_to_clangd[kReadEnd]);
-        close(editor_to_clangd[kWriteEnd]);
-        close(clangd_to_editor[kReadEnd]);
-        close(clangd_to_editor[kWriteEnd]);
+        close(to_child[kReadEnd]);
+        close(to_child[kWriteEnd]);
+        close(from_child[kReadEnd]);
+        close(from_child[kWriteEnd]);
 
         std::string path(clangd_path);
         // NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
@@ -56,11 +56,11 @@ ClangdProcess::ClangdProcess(std::string_view clangd_path) {
         // ── Parent only ───────────────────────────────────────────────────────
         // Close the ends the parent handed to the child -- keeping them open
         // would prevent the pipe from reaching EOF when clangd exits.
-        close(editor_to_clangd[kReadEnd]);
-        close(clangd_to_editor[kWriteEnd]);
+        close(to_child[kReadEnd]);
+        close(from_child[kWriteEnd]);
 
-        stdin_fd_ = editor_to_clangd[kWriteEnd];
-        stdout_fd_ = clangd_to_editor[kReadEnd];
+        clangd_stdin_fd_ = to_child[kWriteEnd];
+        clangd_stdout_fd_ = from_child[kReadEnd];
 
         reader_thread_ = std::thread(&ClangdProcess::reader_loop, this);
     }
@@ -68,8 +68,8 @@ ClangdProcess::ClangdProcess(std::string_view clangd_path) {
 
 ClangdProcess::~ClangdProcess() {
     running_ = false;
-    close(stdin_fd_);
-    close(stdout_fd_);  // unblocks the reader_loop read()
+    close(clangd_stdin_fd_);
+    close(clangd_stdout_fd_);  // unblocks the reader_loop read()
 
     if (reader_thread_.joinable()) {
         reader_thread_.join();
@@ -85,7 +85,7 @@ void ClangdProcess::send(const std::string& message) {
     while (remaining > 0) {
         // write() may write fewer bytes than requested -- loop until all sent.
         // Returns -1 on error (e.g. clangd exited and closed the pipe).
-        ssize_t written = write(stdin_fd_, ptr, remaining);
+        ssize_t written = write(clangd_stdin_fd_, ptr, remaining);
         if (written <= 0) {
             break;
         }
@@ -116,7 +116,7 @@ void ClangdProcess::reader_loop() {
     while (running_) {
         // read() blocks here until clangd writes data or the pipe closes.
         // Returns 0 on EOF (clangd exited), -1 on error.
-        ssize_t n = read(stdout_fd_, buf.data(), buf.size());
+        ssize_t n = read(clangd_stdout_fd_, buf.data(), buf.size());
         if (n <= 0) {
             break;
         }

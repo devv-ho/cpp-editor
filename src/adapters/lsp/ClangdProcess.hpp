@@ -36,8 +36,8 @@ public:
 
 private:
     pid_t pid_;
-    int stdin_fd_;
-    int stdout_fd_;
+    int clangd_stdin_fd_;
+    int clangd_stdout_fd_;
 
     std::thread reader_thread_;
     std::mutex queue_mutex_;

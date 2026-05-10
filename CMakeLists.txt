@@ -39,6 +39,7 @@ target_compile_features(editor_core INTERFACE cxx_std_23)
 add_library(editor_adapters STATIC
   src/adapters/lsp/ClangdProcess.cpp
   src/core/usecases/LspService.cpp
+  src/drivers/FtxuiRenderer.cpp
 )
 target_include_directories(editor_adapters PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_compile_features(editor_adapters PUBLIC cxx_std_23)

@@ -1,5 +1,7 @@
 #include "core/usecases/LspService.hpp"
 
+#include <unistd.h>
+
 #include <string_view>
 
 #include "adapters/lsp/LspEncoder.hpp"
@@ -45,8 +47,11 @@ std::vector<editor::core::Diagnostic> LspService::diagnostics(const std::string&
 
 void LspService::handshake() {
     // initialize: tell clangd our capabilities and workspace root.
+    // processId: our PID so clangd can exit if the editor crashes.
+    // rootUri: null for now -- set to the project root in Task 9/10 so
+    //          clangd can locate compile_commands.json for build flags.
     send_request("initialize", {
-                                   {"processId", nullptr},
+                                   {"processId", static_cast<int>(getpid())},
                                    {"rootUri", nullptr},
                                    {"capabilities", nlohmann::json::object()},
                                });

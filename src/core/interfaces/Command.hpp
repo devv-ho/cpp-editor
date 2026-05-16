@@ -17,6 +17,7 @@ enum class Command {
     enter_insert_after,
     enter_normal,
     // Insert mode commands
+    insert_char,
     insert_newline,
     backspace,
     // Pending (multi-key sequences)

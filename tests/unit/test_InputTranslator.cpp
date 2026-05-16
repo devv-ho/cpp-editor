@@ -85,10 +85,10 @@ TEST(InputTranslatorTest, Insert_Return) {
     EXPECT_EQ(translate(ftxui::Event::Return, EditorMode::Insert), Command::insert_newline);
 }
 
-TEST(InputTranslatorTest, Insert_TypingCharsReturnNullopt) {
-    EXPECT_EQ(translate(ftxui::Event::Character('a'), EditorMode::Insert), std::nullopt);
-    EXPECT_EQ(translate(ftxui::Event::Character('h'), EditorMode::Insert), std::nullopt);
-    EXPECT_EQ(translate(ftxui::Event::Character('l'), EditorMode::Insert), std::nullopt);
-    EXPECT_EQ(translate(ftxui::Event::Character('z'), EditorMode::Insert), std::nullopt);
-    EXPECT_EQ(translate(ftxui::Event::Character('i'), EditorMode::Insert), std::nullopt);
+TEST(InputTranslatorTest, Insert_TypingCharsReturnInsertChar) {
+    EXPECT_EQ(translate(ftxui::Event::Character('a'), EditorMode::Insert), Command::insert_char);
+    EXPECT_EQ(translate(ftxui::Event::Character('h'), EditorMode::Insert), Command::insert_char);
+    EXPECT_EQ(translate(ftxui::Event::Character('l'), EditorMode::Insert), Command::insert_char);
+    EXPECT_EQ(translate(ftxui::Event::Character('z'), EditorMode::Insert), Command::insert_char);
+    EXPECT_EQ(translate(ftxui::Event::Character('i'), EditorMode::Insert), Command::insert_char);
 }

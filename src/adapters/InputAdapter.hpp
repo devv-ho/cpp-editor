@@ -4,7 +4,6 @@
 
 #include "adapters/InputTranslator.hpp"
 #include "core/entities/Document.hpp"
-#include "core/usecases/EditorCommands.hpp"
 #include "core/usecases/EditorMode.hpp"
 #include "core/usecases/InputDispatcher.hpp"
 
@@ -20,9 +19,8 @@ public:
     DispatchResult process(const ftxui::Event& event, core::Document& doc) {
         if (auto cmd = translate(event, mode_)) {
             if (*cmd == core::Command::quit) return {.quit = true, .mode = mode_};
-            mode_ = dispatcher_.dispatch(*cmd, mode_, doc);
-        } else if (mode_ == core::EditorMode::Insert && event.is_character()) {
-            core::commands::insert_char(doc, event.character()[0]);
+            char ch = event.is_character() ? event.character()[0] : '\0';
+            mode_ = dispatcher_.dispatch(*cmd, mode_, doc, ch);
         }
         return {.quit = false, .mode = mode_};
     }

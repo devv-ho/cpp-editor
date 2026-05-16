@@ -12,11 +12,11 @@ namespace editor::core {
 // Returns the resulting EditorMode after execution.
 class InputDispatcher {
 public:
-    EditorMode dispatch(Command cmd, EditorMode mode, Document& doc) {
+    EditorMode dispatch(Command cmd, EditorMode mode, Document& doc, char ch = '\0') {
         if (mode == EditorMode::Normal) {
             return dispatch_normal(cmd, doc);
         } else {
-            return dispatch_insert(cmd, doc);
+            return dispatch_insert(cmd, doc, ch);
         }
     }
 
@@ -71,11 +71,14 @@ private:
         return EditorMode::Normal;
     }
 
-    EditorMode dispatch_insert(Command cmd, Document& doc) {
+    EditorMode dispatch_insert(Command cmd, Document& doc, char ch) {
         switch (cmd) {
             case Command::enter_normal:
                 commands::enter_normal(doc);
                 return EditorMode::Normal;
+            case Command::insert_char:
+                commands::insert_char(doc, ch);
+                break;
             case Command::insert_newline:
                 commands::insert_newline(doc);
                 break;

@@ -38,8 +38,8 @@ namespace editor::adapters {
         return std::nullopt;
     }
 
-    // Insert mode: all characters are raw typing.
-    return std::nullopt;
+    // Insert mode: all characters are typed into the buffer.
+    return core::Command::insert_char;
 }
 
 }  // namespace editor::adapters

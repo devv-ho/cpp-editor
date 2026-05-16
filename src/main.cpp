@@ -7,7 +7,7 @@
 #include "adapters/lsp/ClangdProcess.hpp"
 #include "core/usecases/FileService.hpp"
 #include "core/usecases/LspService.hpp"
-#include "drivers/FtxuiRenderer.hpp"
+#include "drivers/EditorApp.hpp"
 
 int main(int argc, char* argv[]) {
     if (argc < 2) {
@@ -32,8 +32,8 @@ int main(int argc, char* argv[]) {
     editor::core::usecases::LspService lsp(std::move(process));
     lsp.did_open(uri, doc.buffer().to_string());
 
-    editor::drivers::FtxuiRenderer renderer(doc, lsp, uri);
-    renderer.run();
+    editor::drivers::EditorApp app(doc, lsp, uri);
+    app.run();
 
     return EXIT_SUCCESS;
 }

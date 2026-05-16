@@ -1,106 +1,94 @@
-// Defines InputDispatcher -- routes Key events to EditorCommands based on current mode.
-
 #pragma once
 
 #include "core/entities/Document.hpp"
-#include "core/interfaces/Key.hpp"
+#include "core/interfaces/Command.hpp"
 #include "core/usecases/EditorCommands.hpp"
 #include "core/usecases/EditorMode.hpp"
 
 namespace editor::core {
 
-// Routes Key events to EditorCommands. Holds modal state and the pending-g flag
-// needed to detect the gg motion (two consecutive g presses).
+// Executes a Command against a Document given the current mode.
+// Stateless except for pending_g (Normal-mode gg sequence).
+// Returns the resulting EditorMode after execution.
 class InputDispatcher {
 public:
-    explicit InputDispatcher(EditorMode initial_mode = EditorMode::Normal) : mode_{initial_mode} {}
-
-    [[nodiscard]] EditorMode mode() const noexcept { return mode_; }
-
-    EditorMode dispatch(Key key, Document& doc) {
-        if (mode_ == EditorMode::Normal) {
-            dispatch_normal(key, doc);
+    EditorMode dispatch(Command cmd, EditorMode mode, Document& doc, char ch = '\0') {
+        if (mode == EditorMode::Normal) {
+            return dispatch_normal(cmd, doc);
         } else {
-            dispatch_insert(key, doc);
+            return dispatch_insert(cmd, doc, ch);
         }
-        return mode_;
-    }
-
-    // Overload for raw printable characters. Key only covers named keys; printable
-    // text typed in insert mode arrives as char and bypasses the Key enum entirely.
-    EditorMode dispatch(char ch, Document& doc) {
-        if (mode_ == EditorMode::Insert) {
-            commands::insert_char(doc, ch);
-        }
-        return mode_;
     }
 
 private:
-    EditorMode mode_;
     bool pending_g_ = false;
 
-    void dispatch_normal(Key key, Document& doc) {
+    EditorMode dispatch_normal(Command cmd, Document& doc) {
         if (pending_g_) {
             pending_g_ = false;
-            if (key == Key::g) {
+            if (cmd == Command::pending_g) {
                 commands::move_top(doc);
-                return;
+                return EditorMode::Normal;
             }
         }
 
-        switch (key) {
-            case Key::h:
+        switch (cmd) {
+            case Command::move_left:
                 commands::move_left(doc);
                 break;
-            case Key::l:
+            case Command::move_right:
                 commands::move_right(doc);
                 break;
-            case Key::j:
+            case Command::move_down:
                 commands::move_down(doc);
                 break;
-            case Key::k:
+            case Command::move_up:
                 commands::move_up(doc);
                 break;
-            case Key::g:
-                pending_g_ = true;
-                break;
-            case Key::G:
+            case Command::move_bottom:
                 commands::move_bottom(doc);
                 break;
-            case Key::zero:
+            case Command::move_sol:
                 commands::move_sol(doc);
                 break;
-            case Key::dollar:
+            case Command::move_eol:
                 commands::move_eol(doc);
                 break;
-            case Key::i:
-                commands::enter_insert(doc);
-                mode_ = EditorMode::Insert;
+            case Command::pending_g:
+                pending_g_ = true;
                 break;
-            case Key::a:
+            case Command::enter_insert:
+                commands::enter_insert(doc);
+                return EditorMode::Insert;
+            case Command::enter_insert_after:
                 commands::enter_insert_after(doc);
-                mode_ = EditorMode::Insert;
+                return EditorMode::Insert;
+            case Command::quit:
                 break;
             default:
                 break;
         }
+        return EditorMode::Normal;
     }
 
-    void dispatch_insert(Key key, Document& doc) {
-        switch (key) {
-            case Key::escape:
+    EditorMode dispatch_insert(Command cmd, Document& doc, char ch) {
+        switch (cmd) {
+            case Command::enter_normal:
                 commands::enter_normal(doc);
-                mode_ = EditorMode::Normal;
+                return EditorMode::Normal;
+            case Command::insert_char:
+                commands::insert_char(doc, ch);
                 break;
-            case Key::enter:
+            case Command::insert_newline:
                 commands::insert_newline(doc);
                 break;
-            case Key::backspace:
+            case Command::backspace:
                 commands::backspace(doc);
                 break;
             default:
                 break;
         }
+        return EditorMode::Insert;
     }
 };
 

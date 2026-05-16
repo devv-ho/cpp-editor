@@ -1,38 +1,34 @@
-// Defines FtxuiRenderer -- FTXUI-based terminal renderer for the editor.
+// Defines FtxuiRenderer -- pure drawing layer.
 //
-// Owns the FTXUI screen loop. Renders buffer lines, cursor, mode status bar,
-// and LSP diagnostics. Routes keyboard events through InputDispatcher.
-// ESC in normal mode quits.
+// Stateless: given the current document, LSP service, URI, and mode, produces
+// an FTXUI Element. Owns no screen, no event loop, no input state.
 
 #pragma once
 
-#include <ftxui/component/screen_interactive.hpp>
 #include <ftxui/dom/elements.hpp>
 #include <string>
 
 #include "core/entities/Document.hpp"
 #include "core/usecases/EditorMode.hpp"
-#include "core/usecases/InputDispatcher.hpp"
 #include "core/usecases/LspService.hpp"
 
 namespace editor::drivers {
 
 class FtxuiRenderer {
 public:
-    FtxuiRenderer(core::Document& doc, core::usecases::LspService& lsp, std::string uri);
+    FtxuiRenderer(const core::Document& doc, const core::usecases::LspService& lsp,
+                  const std::string& uri);
 
-    // Enters the FTXUI event loop. Blocks until the user quits.
-    void run();
+    // Produces the full terminal frame for the current editor state.
+    ftxui::Element render(core::EditorMode mode) const;
 
 private:
-    core::Document& doc_;
-    core::usecases::LspService& lsp_;
-    std::string uri_;
-    core::InputDispatcher dispatcher_;
-    ftxui::ScreenInteractive screen_;
+    const core::Document& doc_;
+    const core::usecases::LspService& lsp_;
+    const std::string& uri_;
 
     ftxui::Element render_buffer() const;
-    ftxui::Element render_statusbar() const;
+    ftxui::Element render_statusbar(core::EditorMode mode) const;
     ftxui::Element render_diagnostics() const;
 };
 

@@ -42,6 +42,7 @@ public:
 
     [[nodiscard]] Position position() const noexcept { return cursor_.position(); }
     [[nodiscard]] Cursor& cursor() noexcept { return cursor_; }
+    [[nodiscard]] const Cursor& cursor() const noexcept { return cursor_; }
 
     // -- Buffer mutations ------------------------------------------------------
     // These only modify text. Cursor movement after a mutation is the

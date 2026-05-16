@@ -13,7 +13,7 @@ This is a **prototype/blueprint** — the human will extend it. Claude's role af
 
 ## Scope (prototype)
 - Vim modal editing: Normal / Insert mode
-- Keys: `h j k l gg G $ 0 i a ESC`
+- Keys: `h j k l gg G $ 0 i a ESC Backspace Return`
 - File open/save via CLI arg
 - LSP: real clangd subprocess, diagnostics displayed in TUI
 - Unit tests for buffer, cursor, LSP message parsing

@@ -1,26 +1,23 @@
-// Unit tests for EditorCommands and InputDispatcher.
-
 #include <gtest/gtest.h>
 
 #include "core/entities/Document.hpp"
+#include "core/interfaces/Command.hpp"
 #include "core/usecases/EditorCommands.hpp"
 #include "core/usecases/EditorMode.hpp"
 #include "core/usecases/InputDispatcher.hpp"
 
+using editor::core::Command;
 using editor::core::Document;
 using editor::core::EditorMode;
 using editor::core::InputDispatcher;
-using editor::core::Key;
 namespace cmd = editor::core::commands;
 
-// -- move_left / move_right (normal mode policy) ------------------------------
+// -- move_left / move_right ---------------------------------------------------
 
 TEST(EditorCommandsTest, MoveRightClampsAtLastChar) {
     Document doc{"hello"};
-    for (int i = 0; i < 10; ++i) {
-        cmd::move_right(doc);
-    }
-    EXPECT_EQ(doc.position().col, 4u);  // len=5, max col=4
+    for (int i = 0; i < 10; ++i) cmd::move_right(doc);
+    EXPECT_EQ(doc.position().col, 4u);
 }
 
 TEST(EditorCommandsTest, MoveLeftStopsAtSOL) {
@@ -53,13 +50,12 @@ TEST(EditorCommandsTest, MoveUpDecrementsLine) {
 }
 
 TEST(EditorCommandsTest, MoveDownClampsColToShorterLine) {
-    // line 0: "hello" (len 5), line 1: "hi" (len 2)
     Document doc{"hello\nhi"};
     cmd::move_right(doc);
     cmd::move_right(doc);
-    cmd::move_right(doc);  // col=3
+    cmd::move_right(doc);
     cmd::move_down(doc);
-    EXPECT_EQ(doc.position().col, 1u);  // clamped to len-1=1
+    EXPECT_EQ(doc.position().col, 1u);
 }
 
 // -- move_top / move_bottom ---------------------------------------------------
@@ -107,21 +103,20 @@ TEST(EditorCommandsTest, EnterInsertKeepsCursorPosition) {
 
 TEST(EditorCommandsTest, EnterInsertAfterAdvancesCursor) {
     Document doc{"hello"};
-    cmd::move_right(doc);  // col=1
+    cmd::move_right(doc);
     cmd::enter_insert_after(doc);
     EXPECT_EQ(doc.position().col, 2u);
 }
 
 TEST(EditorCommandsTest, EnterInsertAfterAtEOLDoesNotExceedLen) {
     Document doc{"hi"};
-    cmd::move_right(doc);  // col=1 (last char)
+    cmd::move_right(doc);
     cmd::enter_insert_after(doc);
-    EXPECT_EQ(doc.position().col, 2u);  // insert mode allows col==len
+    EXPECT_EQ(doc.position().col, 2u);
 }
 
 TEST(EditorCommandsTest, EnterNormalClampsColToLastChar) {
     Document doc{"hello"};
-    // Manually move cursor to col 5 (insert mode position)
     doc.cursor().set_position({0, 5});
     cmd::enter_normal(doc);
     EXPECT_EQ(doc.position().col, 4u);
@@ -131,7 +126,7 @@ TEST(EditorCommandsTest, EnterNormalClampsColToLastChar) {
 
 TEST(EditorCommandsTest, InsertCharInsertsAndAdvancesCursor) {
     Document doc{"hllo"};
-    cmd::move_right(doc);  // col=1
+    cmd::move_right(doc);
     cmd::enter_insert(doc);
     cmd::insert_char(doc, 'e');
     EXPECT_EQ(doc.line(0).value(), "hello");
@@ -150,11 +145,7 @@ TEST(EditorCommandsTest, InsertCharAtSOL) {
 
 TEST(EditorCommandsTest, InsertNewlineSplitsLineAndMovesCursor) {
     Document doc{"helloworld"};
-    cmd::move_right(doc);
-    cmd::move_right(doc);
-    cmd::move_right(doc);
-    cmd::move_right(doc);
-    cmd::move_right(doc);  // col=5
+    for (int i = 0; i < 5; ++i) cmd::move_right(doc);
     cmd::enter_insert(doc);
     cmd::insert_newline(doc);
     EXPECT_EQ(doc.line_count(), 2u);
@@ -169,7 +160,7 @@ TEST(EditorCommandsTest, InsertNewlineSplitsLineAndMovesCursor) {
 TEST(EditorCommandsTest, BackspaceDeletesCharLeft) {
     Document doc{"hello"};
     cmd::move_right(doc);
-    cmd::move_right(doc);  // col=2
+    cmd::move_right(doc);
     cmd::enter_insert(doc);
     cmd::backspace(doc);
     EXPECT_EQ(doc.line(0).value(), "hllo");
@@ -178,13 +169,13 @@ TEST(EditorCommandsTest, BackspaceDeletesCharLeft) {
 
 TEST(EditorCommandsTest, BackspaceAtSOLJoinsWithPrevLine) {
     Document doc{"hello\nworld"};
-    cmd::move_down(doc);  // line=1, col=0
+    cmd::move_down(doc);
     cmd::enter_insert(doc);
     cmd::backspace(doc);
     EXPECT_EQ(doc.line_count(), 1u);
     EXPECT_EQ(doc.line(0).value(), "helloworld");
     EXPECT_EQ(doc.position().line, 0u);
-    EXPECT_EQ(doc.position().col, 5u);  // end of "hello"
+    EXPECT_EQ(doc.position().col, 5u);
 }
 
 TEST(EditorCommandsTest, BackspaceAtOriginDoesNothing) {
@@ -197,73 +188,67 @@ TEST(EditorCommandsTest, BackspaceAtOriginDoesNothing) {
 
 // -- InputDispatcher ----------------------------------------------------------
 
-TEST(InputDispatcherTest, InitialModeIsNormal) {
-    InputDispatcher d;
-    EXPECT_EQ(d.mode(), EditorMode::Normal);
-}
-
-TEST(InputDispatcherTest, IKeyEntersInsertMode) {
+TEST(InputDispatcherTest, EnterInsertModeFromNormal) {
     Document doc{"hello"};
     InputDispatcher d;
-    d.dispatch(Key::i, doc);
-    EXPECT_EQ(d.mode(), EditorMode::Insert);
+    auto mode = d.dispatch(Command::enter_insert, EditorMode::Normal, doc);
+    EXPECT_EQ(mode, EditorMode::Insert);
 }
 
-TEST(InputDispatcherTest, EscapeReturnsToNormalMode) {
+TEST(InputDispatcherTest, EscapeFromInsertReturnsNormal) {
     Document doc{"hello"};
     InputDispatcher d;
-    d.dispatch(Key::i, doc);
-    d.dispatch(Key::escape, doc);
-    EXPECT_EQ(d.mode(), EditorMode::Normal);
+    auto mode = d.dispatch(Command::enter_normal, EditorMode::Insert, doc);
+    EXPECT_EQ(mode, EditorMode::Normal);
+}
+
+TEST(InputDispatcherTest, MoveRightInNormalMode) {
+    Document doc{"hello"};
+    InputDispatcher d;
+    d.dispatch(Command::move_right, EditorMode::Normal, doc);
+    EXPECT_EQ(doc.position().col, 1u);
 }
 
 TEST(InputDispatcherTest, GGMovesToFirstLine) {
     Document doc{"foo\nbar\nbaz"};
     InputDispatcher d;
-    d.dispatch(Key::j, doc);
-    d.dispatch(Key::j, doc);  // line=2
-    d.dispatch(Key::g, doc);
-    d.dispatch(Key::g, doc);  // gg
+    d.dispatch(Command::move_down, EditorMode::Normal, doc);
+    d.dispatch(Command::move_down, EditorMode::Normal, doc);
+    d.dispatch(Command::pending_g, EditorMode::Normal, doc);
+    d.dispatch(Command::pending_g, EditorMode::Normal, doc);
     EXPECT_EQ(doc.position().line, 0u);
 }
 
 TEST(InputDispatcherTest, SingleGDoesNotMove) {
     Document doc{"foo\nbar"};
     InputDispatcher d;
-    d.dispatch(Key::j, doc);  // line=1
-    d.dispatch(Key::g, doc);  // pending g -- no move yet
+    d.dispatch(Command::move_down, EditorMode::Normal, doc);
+    d.dispatch(Command::pending_g, EditorMode::Normal, doc);
     EXPECT_EQ(doc.position().line, 1u);
 }
 
 TEST(InputDispatcherTest, GFollowedByNonGClearsPending) {
     Document doc{"foo\nbar\nbaz"};
     InputDispatcher d;
-    d.dispatch(Key::j, doc);
-    d.dispatch(Key::j, doc);             // line=2
-    d.dispatch(Key::g, doc);             // pending g
-    d.dispatch(Key::h, doc);             // clears pending, moves left instead
-    EXPECT_EQ(doc.position().line, 2u);  // still on line 2
-}
-
-TEST(InputDispatcherTest, DispatchCharInsertsInInsertMode) {
-    Document doc{"hllo"};
-    InputDispatcher d;
-    d.dispatch(Key::i, doc);
-    d.dispatch('e', doc);
-    EXPECT_EQ(doc.line(0).value(), "ehllo");
-}
-
-TEST(InputDispatcherTest, DispatchCharIgnoredInNormalMode) {
-    Document doc{"hello"};
-    InputDispatcher d;
-    d.dispatch('x', doc);
-    EXPECT_EQ(doc.line(0).value(), "hello");
+    d.dispatch(Command::move_down, EditorMode::Normal, doc);
+    d.dispatch(Command::move_down, EditorMode::Normal, doc);
+    d.dispatch(Command::pending_g, EditorMode::Normal, doc);
+    d.dispatch(Command::move_left, EditorMode::Normal, doc);
+    EXPECT_EQ(doc.position().line, 2u);
 }
 
 TEST(InputDispatcherTest, AKeyEntersInsertAndAdvancesCursor) {
     Document doc{"hello"};
     InputDispatcher d;
-    d.dispatch(Key::a, doc);
-    EXPECT_EQ(d.mode(), EditorMode::Insert);
+    auto mode = d.dispatch(Command::enter_insert_after, EditorMode::Normal, doc);
+    EXPECT_EQ(mode, EditorMode::Insert);
     EXPECT_EQ(doc.position().col, 1u);
+}
+
+TEST(InputDispatcherTest, InsertNewlineInInsertMode) {
+    Document doc{"helloworld"};
+    for (int i = 0; i < 5; ++i) cmd::move_right(doc);
+    InputDispatcher d;
+    d.dispatch(Command::insert_newline, EditorMode::Insert, doc);
+    EXPECT_EQ(doc.line_count(), 2u);
 }

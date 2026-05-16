@@ -30,6 +30,12 @@ private:
     ftxui::Element render_buffer() const;
     ftxui::Element render_statusbar(core::EditorMode mode) const;
     ftxui::Element render_diagnostics() const;
+    ftxui::Element render_hover() const;
+    ftxui::Element render_signature() const;
+    ftxui::Element render_locations() const;
+    ftxui::Element render_completion() const;
+    ftxui::Element render_symbols() const;
+    ftxui::Element render_inlay_hints() const;
 };
 
 }  // namespace editor::drivers

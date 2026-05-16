@@ -129,6 +129,28 @@ public:
 
     std::vector<editor::core::Diagnostic> diagnostics(const std::string& uri) const;
 
+    // ── Latest results (pull-based, read by renderer) ─────────────────────────
+    // Each field holds the most recent result for that feature. Cleared when
+    // the user moves the cursor (managed by InputDispatcher via clear_*).
+
+    std::string hover_text() const;
+    std::string signature_text() const;
+    std::vector<LspLocation> locations() const;  // definition/references/etc.
+    std::vector<LspCompletionItem> completion_items() const;
+    std::vector<LspDocumentSymbol> symbols() const;
+    std::vector<LspInlayHint> inlay_hints() const;
+    std::vector<LspLocation> highlights() const;
+
+    void set_hover(std::string text);
+    void set_signature(std::string text);
+    void set_locations(std::vector<LspLocation> locs);
+    void set_completion(std::vector<LspCompletionItem> items);
+    void set_symbols(std::vector<LspDocumentSymbol> syms);
+    void set_inlay_hints(std::vector<LspInlayHint> hints);
+    void set_highlights(std::vector<LspLocation> locs);
+
+    void clear_overlay();  // clears hover, signature, locations, completion
+
     // ── Config ────────────────────────────────────────────────────────────────
 
     const EditorConfig& config() const { return config_; }
@@ -146,6 +168,16 @@ private:
 
     mutable std::mutex diagnostics_mutex_;
     std::unordered_map<std::string, std::vector<editor::core::Diagnostic>> diagnostics_;
+
+    // Latest overlay results (protected by overlay_mutex_).
+    mutable std::mutex overlay_mutex_;
+    std::string hover_text_;
+    std::string signature_text_;
+    std::vector<LspLocation> locations_;
+    std::vector<LspCompletionItem> completion_items_;
+    std::vector<LspDocumentSymbol> symbols_;
+    std::vector<LspInlayHint> inlay_hints_;
+    std::vector<LspLocation> highlights_;
 
     void handshake();
     void dispatch_loop();

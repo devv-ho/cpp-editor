@@ -53,33 +53,45 @@ void LspService::did_close(const std::string& uri) {
 void LspService::go_to_definition(const std::string& uri, std::size_t line, std::size_t col,
                                   LocationCallback cb) {
     if (!config_.lsp.go_to_definition) return;
-    send_request(
-        "textDocument/definition", text_document_position(uri, line, col),
-        [cb = std::move(cb)](const nlohmann::json& result) { cb(parse_locations(result)); });
+    send_request("textDocument/definition", text_document_position(uri, line, col),
+                 [this, cb = std::move(cb)](const nlohmann::json& result) {
+                     auto locs = parse_locations(result);
+                     set_locations(locs);
+                     cb(locs);
+                 });
 }
 
 void LspService::go_to_declaration(const std::string& uri, std::size_t line, std::size_t col,
                                    LocationCallback cb) {
     if (!config_.lsp.go_to_declaration) return;
-    send_request(
-        "textDocument/declaration", text_document_position(uri, line, col),
-        [cb = std::move(cb)](const nlohmann::json& result) { cb(parse_locations(result)); });
+    send_request("textDocument/declaration", text_document_position(uri, line, col),
+                 [this, cb = std::move(cb)](const nlohmann::json& result) {
+                     auto locs = parse_locations(result);
+                     set_locations(locs);
+                     cb(locs);
+                 });
 }
 
 void LspService::go_to_implementation(const std::string& uri, std::size_t line, std::size_t col,
                                       LocationCallback cb) {
     if (!config_.lsp.go_to_implementation) return;
-    send_request(
-        "textDocument/implementation", text_document_position(uri, line, col),
-        [cb = std::move(cb)](const nlohmann::json& result) { cb(parse_locations(result)); });
+    send_request("textDocument/implementation", text_document_position(uri, line, col),
+                 [this, cb = std::move(cb)](const nlohmann::json& result) {
+                     auto locs = parse_locations(result);
+                     set_locations(locs);
+                     cb(locs);
+                 });
 }
 
 void LspService::go_to_type_definition(const std::string& uri, std::size_t line, std::size_t col,
                                        LocationCallback cb) {
     if (!config_.lsp.type_definition) return;
-    send_request(
-        "textDocument/typeDefinition", text_document_position(uri, line, col),
-        [cb = std::move(cb)](const nlohmann::json& result) { cb(parse_locations(result)); });
+    send_request("textDocument/typeDefinition", text_document_position(uri, line, col),
+                 [this, cb = std::move(cb)](const nlohmann::json& result) {
+                     auto locs = parse_locations(result);
+                     set_locations(locs);
+                     cb(locs);
+                 });
 }
 
 void LspService::find_references(const std::string& uri, std::size_t line, std::size_t col,
@@ -87,9 +99,12 @@ void LspService::find_references(const std::string& uri, std::size_t line, std::
     if (!config_.lsp.find_references) return;
     auto params = text_document_position(uri, line, col);
     params["context"] = {{"includeDeclaration", true}};
-    send_request(
-        "textDocument/references", params,
-        [cb = std::move(cb)](const nlohmann::json& result) { cb(parse_locations(result)); });
+    send_request("textDocument/references", params,
+                 [this, cb = std::move(cb)](const nlohmann::json& result) {
+                     auto locs = parse_locations(result);
+                     set_locations(locs);
+                     cb(locs);
+                 });
 }
 
 // ── Information ───────────────────────────────────────────────────────────────
@@ -98,8 +113,9 @@ void LspService::hover(const std::string& uri, std::size_t line, std::size_t col
                        HoverCallback cb) {
     if (!config_.lsp.hover) return;
     send_request("textDocument/hover", text_document_position(uri, line, col),
-                 [cb = std::move(cb)](const nlohmann::json& result) {
+                 [this, cb = std::move(cb)](const nlohmann::json& result) {
                      if (result.is_null()) {
+                         set_hover("");
                          cb("");
                          return;
                      }
@@ -119,6 +135,7 @@ void LspService::hover(const std::string& uri, std::size_t line, std::size_t col
                              }
                          }
                      }
+                     set_hover(text);
                      cb(text);
                  });
 }
@@ -127,17 +144,15 @@ void LspService::signature_help(const std::string& uri, std::size_t line, std::s
                                 SignatureCallback cb) {
     if (!config_.lsp.signature_help) return;
     send_request("textDocument/signatureHelp", text_document_position(uri, line, col),
-                 [cb = std::move(cb)](const nlohmann::json& result) {
+                 [this, cb = std::move(cb)](const nlohmann::json& result) {
                      if (result.is_null() || !result.contains("signatures")) {
+                         set_signature("");
                          cb("");
                          return;
                      }
                      const auto& sigs = result["signatures"];
-                     if (sigs.empty()) {
-                         cb("");
-                         return;
-                     }
-                     std::string label = sigs[0].value("label", "");
+                     std::string label = sigs.empty() ? "" : sigs[0].value("label", "");
+                     set_signature(label);
                      cb(label);
                  });
 }
@@ -146,32 +161,32 @@ void LspService::completion(const std::string& uri, std::size_t line, std::size_
                             CompletionCallback cb) {
     if (!config_.lsp.completion) return;
     auto params = text_document_position(uri, line, col);
-    params["context"] = {{"triggerKind", 1}};  // Invoked
-    send_request(
-        "textDocument/completion", params,
-        [cb = std::move(cb)](const nlohmann::json& result) { cb(parse_completion(result)); });
+    params["context"] = {{"triggerKind", 1}};
+    send_request("textDocument/completion", params,
+                 [this, cb = std::move(cb)](const nlohmann::json& result) {
+                     auto items = parse_completion(result);
+                     set_completion(items);
+                     cb(items);
+                 });
 }
 
 void LspService::document_highlight(const std::string& uri, std::size_t line, std::size_t col,
                                     HighlightCallback cb) {
     if (!config_.lsp.document_highlight) return;
     send_request("textDocument/documentHighlight", text_document_position(uri, line, col),
-                 [cb = std::move(cb), uri](const nlohmann::json& result) {
-                     // documentHighlight returns ranges, not full locations.
-                     // Attach the current URI so callers get consistent LspLocation.
+                 [this, cb = std::move(cb), uri](const nlohmann::json& result) {
                      std::vector<LspLocation> locs;
-                     if (!result.is_array()) {
-                         cb(locs);
-                         return;
+                     if (result.is_array()) {
+                         for (const auto& h : result) {
+                             if (!h.contains("range")) continue;
+                             LspLocation loc;
+                             loc.uri = uri;
+                             loc.line = h["range"]["start"]["line"].get<std::size_t>();
+                             loc.col = h["range"]["start"]["character"].get<std::size_t>();
+                             locs.push_back(std::move(loc));
+                         }
                      }
-                     for (const auto& h : result) {
-                         if (!h.contains("range")) continue;
-                         LspLocation loc;
-                         loc.uri = uri;
-                         loc.line = h["range"]["start"]["line"].get<std::size_t>();
-                         loc.col = h["range"]["start"]["character"].get<std::size_t>();
-                         locs.push_back(std::move(loc));
-                     }
+                     set_highlights(locs);
                      cb(locs);
                  });
 }
@@ -183,21 +198,32 @@ void LspService::inlay_hints(const std::string& uri, std::size_t start_line, std
                              {"range",
                               {{"start", {{"line", start_line}, {"character", 0}}},
                                {"end", {{"line", end_line}, {"character", 0}}}}}};
-    send_request(
-        "textDocument/inlayHint", params,
-        [cb = std::move(cb)](const nlohmann::json& result) { cb(parse_inlay_hints(result)); });
+    send_request("textDocument/inlayHint", params,
+                 [this, cb = std::move(cb)](const nlohmann::json& result) {
+                     auto hints = parse_inlay_hints(result);
+                     set_inlay_hints(hints);
+                     cb(hints);
+                 });
 }
 
 void LspService::document_symbol(const std::string& uri, SymbolCallback cb) {
     if (!config_.lsp.document_symbol) return;
     send_request("textDocument/documentSymbol", {{"textDocument", {{"uri", uri}}}},
-                 [cb = std::move(cb)](const nlohmann::json& result) { cb(parse_symbols(result)); });
+                 [this, cb = std::move(cb)](const nlohmann::json& result) {
+                     auto syms = parse_symbols(result);
+                     set_symbols(syms);
+                     cb(syms);
+                 });
 }
 
 void LspService::workspace_symbol(const std::string& query, WorkspaceSymbolCallback cb) {
     if (!config_.lsp.workspace_symbol) return;
     send_request("workspace/symbol", {{"query", query}},
-                 [cb = std::move(cb)](const nlohmann::json& result) { cb(parse_symbols(result)); });
+                 [this, cb = std::move(cb)](const nlohmann::json& result) {
+                     auto syms = parse_symbols(result);
+                     set_symbols(syms);
+                     cb(syms);
+                 });
 }
 
 // ── Edit operations ───────────────────────────────────────────────────────────
@@ -239,6 +265,75 @@ std::vector<editor::core::Diagnostic> LspService::diagnostics(const std::string&
     auto it = diagnostics_.find(uri);
     if (it == diagnostics_.end()) return {};
     return it->second;
+}
+
+// ── Overlay getters ───────────────────────────────────────────────────────────
+
+std::string LspService::hover_text() const {
+    std::lock_guard lock(overlay_mutex_);
+    return hover_text_;
+}
+std::string LspService::signature_text() const {
+    std::lock_guard lock(overlay_mutex_);
+    return signature_text_;
+}
+std::vector<LspLocation> LspService::locations() const {
+    std::lock_guard lock(overlay_mutex_);
+    return locations_;
+}
+std::vector<LspCompletionItem> LspService::completion_items() const {
+    std::lock_guard lock(overlay_mutex_);
+    return completion_items_;
+}
+std::vector<LspDocumentSymbol> LspService::symbols() const {
+    std::lock_guard lock(overlay_mutex_);
+    return symbols_;
+}
+std::vector<LspInlayHint> LspService::inlay_hints() const {
+    std::lock_guard lock(overlay_mutex_);
+    return inlay_hints_;
+}
+std::vector<LspLocation> LspService::highlights() const {
+    std::lock_guard lock(overlay_mutex_);
+    return highlights_;
+}
+
+// ── Overlay setters ───────────────────────────────────────────────────────────
+
+void LspService::set_hover(std::string text) {
+    std::lock_guard lock(overlay_mutex_);
+    hover_text_ = std::move(text);
+}
+void LspService::set_signature(std::string text) {
+    std::lock_guard lock(overlay_mutex_);
+    signature_text_ = std::move(text);
+}
+void LspService::set_locations(std::vector<LspLocation> locs) {
+    std::lock_guard lock(overlay_mutex_);
+    locations_ = std::move(locs);
+}
+void LspService::set_completion(std::vector<LspCompletionItem> items) {
+    std::lock_guard lock(overlay_mutex_);
+    completion_items_ = std::move(items);
+}
+void LspService::set_symbols(std::vector<LspDocumentSymbol> syms) {
+    std::lock_guard lock(overlay_mutex_);
+    symbols_ = std::move(syms);
+}
+void LspService::set_inlay_hints(std::vector<LspInlayHint> hints) {
+    std::lock_guard lock(overlay_mutex_);
+    inlay_hints_ = std::move(hints);
+}
+void LspService::set_highlights(std::vector<LspLocation> locs) {
+    std::lock_guard lock(overlay_mutex_);
+    highlights_ = std::move(locs);
+}
+void LspService::clear_overlay() {
+    std::lock_guard lock(overlay_mutex_);
+    hover_text_.clear();
+    signature_text_.clear();
+    locations_.clear();
+    completion_items_.clear();
 }
 
 // ── Internal ──────────────────────────────────────────────────────────────────

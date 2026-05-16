@@ -151,6 +151,11 @@ public:
 
     void clear_overlay();  // clears hover, signature, locations, completion
 
+    // Called from the UI thread after setup. cb is invoked from the LSP
+    // dispatch thread whenever overlay data or diagnostics change, so the
+    // renderer can request a screen refresh without polling.
+    void set_on_update(std::function<void()> cb);
+
     // ── Config ────────────────────────────────────────────────────────────────
 
     const EditorConfig& config() const { return config_; }
@@ -170,6 +175,7 @@ private:
     std::unordered_map<std::string, std::vector<editor::core::Diagnostic>> diagnostics_;
 
     // Latest overlay results (protected by overlay_mutex_).
+    std::function<void()> on_update_;  // fires when overlay/diagnostics change
     mutable std::mutex overlay_mutex_;
     std::string hover_text_;
     std::string signature_text_;

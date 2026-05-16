@@ -300,33 +300,56 @@ std::vector<LspLocation> LspService::highlights() const {
 
 // ── Overlay setters ───────────────────────────────────────────────────────────
 
+void LspService::set_on_update(std::function<void()> cb) { on_update_ = std::move(cb); }
+
 void LspService::set_hover(std::string text) {
-    std::lock_guard lock(overlay_mutex_);
-    hover_text_ = std::move(text);
+    {
+        std::lock_guard lock(overlay_mutex_);
+        hover_text_ = std::move(text);
+    }
+    if (on_update_) on_update_();
 }
 void LspService::set_signature(std::string text) {
-    std::lock_guard lock(overlay_mutex_);
-    signature_text_ = std::move(text);
+    {
+        std::lock_guard lock(overlay_mutex_);
+        signature_text_ = std::move(text);
+    }
+    if (on_update_) on_update_();
 }
 void LspService::set_locations(std::vector<LspLocation> locs) {
-    std::lock_guard lock(overlay_mutex_);
-    locations_ = std::move(locs);
+    {
+        std::lock_guard lock(overlay_mutex_);
+        locations_ = std::move(locs);
+    }
+    if (on_update_) on_update_();
 }
 void LspService::set_completion(std::vector<LspCompletionItem> items) {
-    std::lock_guard lock(overlay_mutex_);
-    completion_items_ = std::move(items);
+    {
+        std::lock_guard lock(overlay_mutex_);
+        completion_items_ = std::move(items);
+    }
+    if (on_update_) on_update_();
 }
 void LspService::set_symbols(std::vector<LspDocumentSymbol> syms) {
-    std::lock_guard lock(overlay_mutex_);
-    symbols_ = std::move(syms);
+    {
+        std::lock_guard lock(overlay_mutex_);
+        symbols_ = std::move(syms);
+    }
+    if (on_update_) on_update_();
 }
 void LspService::set_inlay_hints(std::vector<LspInlayHint> hints) {
-    std::lock_guard lock(overlay_mutex_);
-    inlay_hints_ = std::move(hints);
+    {
+        std::lock_guard lock(overlay_mutex_);
+        inlay_hints_ = std::move(hints);
+    }
+    if (on_update_) on_update_();
 }
 void LspService::set_highlights(std::vector<LspLocation> locs) {
-    std::lock_guard lock(overlay_mutex_);
-    highlights_ = std::move(locs);
+    {
+        std::lock_guard lock(overlay_mutex_);
+        highlights_ = std::move(locs);
+    }
+    if (on_update_) on_update_();
 }
 void LspService::clear_overlay() {
     std::lock_guard lock(overlay_mutex_);
@@ -422,8 +445,11 @@ void LspService::handle_diagnostics(const nlohmann::json& params) {
         diags.push_back(std::move(diag));
     }
 
-    std::lock_guard lock(diagnostics_mutex_);
-    diagnostics_[uri] = std::move(diags);
+    {
+        std::lock_guard lock(diagnostics_mutex_);
+        diagnostics_[uri] = std::move(diags);
+    }
+    if (on_update_) on_update_();
 }
 
 // ── Static helpers ────────────────────────────────────────────────────────────

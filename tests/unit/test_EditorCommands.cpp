@@ -289,3 +289,117 @@ TEST(InputDispatcherTest, InsertNewlineInInsertMode) {
     d.dispatch(Command::insert_newline, EditorMode::Insert, doc);
     EXPECT_EQ(doc.line_count(), 2u);
 }
+
+// -- LSP key binding dispatch -------------------------------------------------
+
+TEST(InputDispatcherTest, GDDispatchesGoToDefinition) {
+    Document doc{"hello"};
+    TestLsp lsp_;
+    auto d = lsp_.make_dispatcher();
+    d.dispatch(Command::pending_g, EditorMode::Normal, doc);
+    EXPECT_NO_THROW(d.dispatch(Command::lsp_definition, EditorMode::Normal, doc));
+}
+
+TEST(InputDispatcherTest, GCapitalDDispatchesGoToDeclaration) {
+    Document doc{"hello"};
+    TestLsp lsp_;
+    auto d = lsp_.make_dispatcher();
+    d.dispatch(Command::pending_g, EditorMode::Normal, doc);
+    EXPECT_NO_THROW(d.dispatch(Command::lsp_declaration, EditorMode::Normal, doc));
+}
+
+TEST(InputDispatcherTest, GIDispatchesGoToImplementation) {
+    Document doc{"hello"};
+    TestLsp lsp_;
+    auto d = lsp_.make_dispatcher();
+    d.dispatch(Command::pending_g, EditorMode::Normal, doc);
+    EXPECT_NO_THROW(d.dispatch(Command::lsp_implementation, EditorMode::Normal, doc));
+}
+
+TEST(InputDispatcherTest, GYDispatchesGoToTypeDefinition) {
+    Document doc{"hello"};
+    TestLsp lsp_;
+    auto d = lsp_.make_dispatcher();
+    d.dispatch(Command::pending_g, EditorMode::Normal, doc);
+    EXPECT_NO_THROW(d.dispatch(Command::lsp_type_definition, EditorMode::Normal, doc));
+}
+
+TEST(InputDispatcherTest, GRDispatchesFindReferences) {
+    Document doc{"hello"};
+    TestLsp lsp_;
+    auto d = lsp_.make_dispatcher();
+    d.dispatch(Command::pending_g, EditorMode::Normal, doc);
+    EXPECT_NO_THROW(d.dispatch(Command::lsp_references, EditorMode::Normal, doc));
+}
+
+TEST(InputDispatcherTest, KDispatchesHover) {
+    Document doc{"hello"};
+    TestLsp lsp_;
+    auto d = lsp_.make_dispatcher();
+    EXPECT_NO_THROW(d.dispatch(Command::lsp_hover, EditorMode::Normal, doc));
+}
+
+TEST(InputDispatcherTest, SpaceFDispatchesFormatting) {
+    Document doc{"hello"};
+    TestLsp lsp_;
+    auto d = lsp_.make_dispatcher();
+    d.dispatch(Command::pending_space, EditorMode::Normal, doc);
+    EXPECT_NO_THROW(d.dispatch(Command::lsp_formatting, EditorMode::Normal, doc));
+}
+
+TEST(InputDispatcherTest, SpaceSDispatchesDocumentSymbol) {
+    Document doc{"hello"};
+    TestLsp lsp_;
+    auto d = lsp_.make_dispatcher();
+    d.dispatch(Command::pending_space, EditorMode::Normal, doc);
+    EXPECT_NO_THROW(d.dispatch(Command::lsp_document_symbol, EditorMode::Normal, doc));
+}
+
+TEST(InputDispatcherTest, SpaceCapitalSDispatchesWorkspaceSymbol) {
+    Document doc{"hello"};
+    TestLsp lsp_;
+    auto d = lsp_.make_dispatcher();
+    d.dispatch(Command::pending_space, EditorMode::Normal, doc);
+    EXPECT_NO_THROW(d.dispatch(Command::lsp_workspace_symbol, EditorMode::Normal, doc));
+}
+
+TEST(InputDispatcherTest, SpaceRNDispatchesRename) {
+    Document doc{"hello"};
+    TestLsp lsp_;
+    auto d = lsp_.make_dispatcher();
+    d.dispatch(Command::pending_space, EditorMode::Normal, doc);
+    d.dispatch(Command::lsp_references, EditorMode::Normal, doc);  // 'r' -> AfterSpaceR
+    EXPECT_NO_THROW(d.dispatch(Command::lsp_rename, EditorMode::Normal, doc));
+}
+
+TEST(InputDispatcherTest, SpaceCADispatchesCodeAction) {
+    Document doc{"hello"};
+    TestLsp lsp_;
+    auto d = lsp_.make_dispatcher();
+    d.dispatch(Command::pending_space, EditorMode::Normal, doc);
+    d.dispatch(Command::lsp_code_action, EditorMode::Normal, doc);  // 'c' -> AfterSpaceC
+    EXPECT_NO_THROW(d.dispatch(Command::lsp_code_action, EditorMode::Normal, doc));
+}
+
+TEST(InputDispatcherTest, MotionClearsOverlay) {
+    Document doc{"hello"};
+    TestLsp lsp_;
+    lsp_.service->set_hover("some hover");
+    lsp_.service->set_signature("sig");
+    lsp_.service->set_locations({{"file:///a.cpp", 0, 0}});
+    auto d = lsp_.make_dispatcher();
+    d.dispatch(Command::move_right, EditorMode::Normal, doc);
+    EXPECT_TRUE(lsp_.service->hover_text().empty());
+    EXPECT_TRUE(lsp_.service->signature_text().empty());
+    EXPECT_TRUE(lsp_.service->locations().empty());
+}
+
+TEST(InputDispatcherTest, InsertCharCallsDidChange) {
+    Document doc{"hello"};
+    TestLsp lsp_;
+    auto d = lsp_.make_dispatcher();
+    d.dispatch(Command::enter_insert, EditorMode::Normal, doc);
+    // did_change with dead process must not crash
+    EXPECT_NO_THROW(d.dispatch(Command::insert_char, EditorMode::Insert, doc, 'X'));
+    EXPECT_EQ(doc.line(0).value(), "Xhello");
+}

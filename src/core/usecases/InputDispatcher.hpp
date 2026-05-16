@@ -41,6 +41,7 @@ private:
 
     enum class PendingState { None, AfterG, AfterSpace, AfterSpaceR, AfterSpaceC };
     PendingState pending_ = PendingState::None;
+    int doc_version_ = 1;
 
     void reset_pending() { pending_ = PendingState::None; }
 
@@ -119,24 +120,31 @@ private:
         switch (cmd) {
             case Command::move_left:
                 commands::move_left(doc);
+                lsp_.clear_overlay();
                 break;
             case Command::move_right:
                 commands::move_right(doc);
+                lsp_.clear_overlay();
                 break;
             case Command::move_down:
                 commands::move_down(doc);
+                lsp_.clear_overlay();
                 break;
             case Command::move_up:
                 commands::move_up(doc);
+                lsp_.clear_overlay();
                 break;
             case Command::move_bottom:
                 commands::move_bottom(doc);
+                lsp_.clear_overlay();
                 break;
             case Command::move_sol:
                 commands::move_sol(doc);
+                lsp_.clear_overlay();
                 break;
             case Command::move_eol:
                 commands::move_eol(doc);
+                lsp_.clear_overlay();
                 break;
             case Command::pending_g:
                 pending_ = PendingState::AfterG;
@@ -168,17 +176,24 @@ private:
                 return EditorMode::Normal;
             case Command::insert_char:
                 commands::insert_char(doc, ch);
+                did_change(doc);
                 break;
             case Command::insert_newline:
                 commands::insert_newline(doc);
+                did_change(doc);
                 break;
             case Command::backspace:
                 commands::backspace(doc);
+                did_change(doc);
                 break;
             default:
                 break;
         }
         return EditorMode::Insert;
+    }
+
+    void did_change(Document& doc) {
+        lsp_.did_change(uri_, doc.buffer().to_string(), ++doc_version_);
     }
 };
 

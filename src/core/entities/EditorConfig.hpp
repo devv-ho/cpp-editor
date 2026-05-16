@@ -21,6 +21,7 @@ struct LspFeatures {
     bool did_close = true;
     bool document_symbol = true;
     bool workspace_symbol = true;
+    bool semantic_tokens = true;
 };
 
 struct EditorConfig {

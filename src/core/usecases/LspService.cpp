@@ -29,6 +29,8 @@ void LspService::did_open(const std::string& uri, const std::string& text) {
     send_notification(
         "textDocument/didOpen",
         {{"textDocument", {{"uri", uri}, {"languageId", "cpp"}, {"version", 1}, {"text", text}}}});
+    if (config_.lsp.semantic_tokens)
+        semantic_tokens_full(uri, [this](auto toks) { set_semantic_tokens(std::move(toks)); });
 }
 
 void LspService::did_change(const std::string& uri, const std::string& text, int version) {
@@ -36,6 +38,8 @@ void LspService::did_change(const std::string& uri, const std::string& text, int
     send_notification("textDocument/didChange",
                       {{"textDocument", {{"uri", uri}, {"version", version}}},
                        {"contentChanges", nlohmann::json::array({{{"text", text}}})}});
+    if (config_.lsp.semantic_tokens)
+        semantic_tokens_full(uri, [this](auto toks) { set_semantic_tokens(std::move(toks)); });
 }
 
 void LspService::did_save(const std::string& uri) {
@@ -226,6 +230,16 @@ void LspService::workspace_symbol(const std::string& query, WorkspaceSymbolCallb
                  });
 }
 
+void LspService::semantic_tokens_full(const std::string& uri, SemanticTokensCallback cb) {
+    if (!config_.lsp.semantic_tokens) return;
+    send_request("textDocument/semanticTokens/full", {{"textDocument", {{"uri", uri}}}},
+                 [this, cb = std::move(cb)](const nlohmann::json& result) {
+                     if (!result.contains("result") || result["result"].is_null()) return;
+                     auto toks = parse_semantic_tokens(result["result"]);
+                     cb(toks);
+                 });
+}
+
 // ── Edit operations ───────────────────────────────────────────────────────────
 
 void LspService::rename(const std::string& uri, std::size_t line, std::size_t col,
@@ -301,6 +315,18 @@ std::vector<LspLocation> LspService::highlights() const {
 // ── Overlay setters ───────────────────────────────────────────────────────────
 
 void LspService::set_on_update(std::function<void()> cb) { on_update_ = std::move(cb); }
+
+std::vector<LspSemanticToken> LspService::semantic_tokens() const {
+    std::lock_guard lock(overlay_mutex_);
+    return semantic_tokens_;
+}
+void LspService::set_semantic_tokens(std::vector<LspSemanticToken> tokens) {
+    {
+        std::lock_guard lock(overlay_mutex_);
+        semantic_tokens_ = std::move(tokens);
+    }
+    if (on_update_) on_update_();
+}
 
 void LspService::set_hover(std::string text) {
     {
@@ -380,8 +406,31 @@ void LspService::handshake() {
                       {"rename", {{"dynamicRegistration", false}}},
                       {"codeAction", {{"dynamicRegistration", false}}},
                       {"formatting", {{"dynamicRegistration", false}}},
-                      {"documentSymbol", {{"dynamicRegistration", false}}}}}}}},
-                 {});
+                      {"documentSymbol", {{"dynamicRegistration", false}}},
+                      {"semanticTokens",
+                       {{"dynamicRegistration", false},
+                        {"requests", {{"full", true}}},
+                        {"formats", {"relative"}},
+                        {"tokenTypes", nlohmann::json::array()},
+                        {"tokenModifiers", nlohmann::json::array()},
+                        {"multilineTokenSupport", false},
+                        {"overlappingTokenSupport", false}}}}}}}},
+                 [this](const nlohmann::json& result) {
+                     // Store token type legend from server capabilities.
+                     if (!result.contains("result")) return;
+                     const auto& caps = result["result"];
+                     if (!caps.contains("capabilities")) return;
+                     const auto& srv = caps["capabilities"];
+                     if (!srv.contains("semanticTokensProvider")) return;
+                     const auto& prov = srv["semanticTokensProvider"];
+                     if (!prov.contains("legend")) return;
+                     const auto& legend = prov["legend"];
+                     if (!legend.contains("tokenTypes")) return;
+                     std::lock_guard lock(overlay_mutex_);
+                     semantic_token_types_.clear();
+                     for (const auto& t : legend["tokenTypes"])
+                         semantic_token_types_.push_back(t.get<std::string>());
+                 });
     send_notification("initialized", nlohmann::json::object());
 }
 
@@ -560,6 +609,48 @@ std::vector<LspInlayHint> LspService::parse_inlay_hints(const nlohmann::json& j)
                 if (part.contains("value")) hint.label += part["value"].get<std::string>();
         }
         result.push_back(std::move(hint));
+    }
+    return result;
+}
+
+// LSP semantic tokens use delta encoding: each token is 5 consecutive integers:
+//   [deltaLine, deltaStartChar, length, tokenTypeIndex, tokenModifiers]
+// deltaLine is relative to the previous token's line;
+// deltaStartChar is relative to the previous token's start col IF on the same line,
+// otherwise absolute from col 0.
+std::vector<LspSemanticToken> LspService::parse_semantic_tokens(const nlohmann::json& j) const {
+    std::vector<LspSemanticToken> result;
+    if (!j.contains("data") || !j["data"].is_array()) return result;
+
+    const auto& data = j["data"];
+    if (data.size() % 5 != 0) return result;
+
+    std::vector<std::string> types;
+    {
+        std::lock_guard lock(overlay_mutex_);
+        types = semantic_token_types_;
+    }
+
+    std::size_t cur_line = 0;
+    std::size_t cur_col = 0;
+
+    for (std::size_t i = 0; i < data.size(); i += 5) {
+        std::size_t delta_line = data[i].get<std::size_t>();
+        std::size_t delta_col = data[i + 1].get<std::size_t>();
+        std::size_t length = data[i + 2].get<std::size_t>();
+        std::size_t type_idx = data[i + 3].get<std::size_t>();
+
+        if (delta_line > 0) {
+            cur_line += delta_line;
+            cur_col = delta_col;
+        } else {
+            cur_col += delta_col;
+        }
+
+        std::string type_name =
+            type_idx < types.size() ? types[type_idx] : std::to_string(type_idx);
+
+        result.push_back({cur_line, cur_col, length, std::move(type_name)});
     }
     return result;
 }

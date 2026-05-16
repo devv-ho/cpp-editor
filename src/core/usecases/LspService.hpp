@@ -60,6 +60,14 @@ struct LspInlayHint {
     std::string label;
 };
 
+// One decoded semantic token span.
+struct LspSemanticToken {
+    std::size_t line;
+    std::size_t col;
+    std::size_t length;
+    std::string token_type;  // e.g. "keyword", "type", "function", "variable"
+};
+
 class LspService {
 public:
     explicit LspService(std::unique_ptr<editor::adapters::lsp::ClangdProcess> process,
@@ -100,6 +108,7 @@ public:
     using InlayHintCallback = std::function<void(std::vector<LspInlayHint>)>;
     using SymbolCallback = std::function<void(std::vector<LspDocumentSymbol>)>;
     using WorkspaceSymbolCallback = std::function<void(std::vector<LspDocumentSymbol>)>;
+    using SemanticTokensCallback = std::function<void(std::vector<LspSemanticToken>)>;
 
     void hover(const std::string& uri, std::size_t line, std::size_t col, HoverCallback cb);
     void signature_help(const std::string& uri, std::size_t line, std::size_t col,
@@ -112,6 +121,7 @@ public:
                      InlayHintCallback cb);
     void document_symbol(const std::string& uri, SymbolCallback cb);
     void workspace_symbol(const std::string& query, WorkspaceSymbolCallback cb);
+    void semantic_tokens_full(const std::string& uri, SemanticTokensCallback cb);
 
     // ── Edit operations (async -- result via callback) ─────────────────────────
 
@@ -140,6 +150,7 @@ public:
     std::vector<LspDocumentSymbol> symbols() const;
     std::vector<LspInlayHint> inlay_hints() const;
     std::vector<LspLocation> highlights() const;
+    std::vector<LspSemanticToken> semantic_tokens() const;
 
     void set_hover(std::string text);
     void set_signature(std::string text);
@@ -148,6 +159,7 @@ public:
     void set_symbols(std::vector<LspDocumentSymbol> syms);
     void set_inlay_hints(std::vector<LspInlayHint> hints);
     void set_highlights(std::vector<LspLocation> locs);
+    void set_semantic_tokens(std::vector<LspSemanticToken> tokens);
 
     void clear_overlay();  // clears hover, signature, locations, completion
 
@@ -184,6 +196,10 @@ private:
     std::vector<LspDocumentSymbol> symbols_;
     std::vector<LspInlayHint> inlay_hints_;
     std::vector<LspLocation> highlights_;
+    std::vector<LspSemanticToken> semantic_tokens_;
+
+    // Token type legend received from clangd's initialize response.
+    std::vector<std::string> semantic_token_types_;
 
     void handshake();
     void dispatch_loop();
@@ -207,6 +223,7 @@ private:
     static std::vector<LspCodeAction> parse_code_actions(const nlohmann::json& j);
     static std::vector<LspDocumentSymbol> parse_symbols(const nlohmann::json& j);
     static std::vector<LspInlayHint> parse_inlay_hints(const nlohmann::json& j);
+    std::vector<LspSemanticToken> parse_semantic_tokens(const nlohmann::json& j) const;
 };
 
 }  // namespace editor::core::usecases

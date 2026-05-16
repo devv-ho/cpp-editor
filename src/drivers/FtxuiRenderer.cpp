@@ -1,7 +1,9 @@
 #include "drivers/FtxuiRenderer.hpp"
 
 #include <ftxui/dom/elements.hpp>
+#include <optional>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "core/entities/Diagnostic.hpp"
@@ -28,6 +30,95 @@ ftxui::Element FtxuiRenderer::render(core::EditorMode mode) const {
     });
 }
 
+namespace {
+
+ftxui::Color token_color(const std::string& type) {
+    if (type == "keyword" || type == "modifier") return ftxui::Color::Blue;
+    if (type == "type" || type == "class" || type == "struct" || type == "enum" ||
+        type == "enumMember" || type == "typeParameter" || type == "concept")
+        return ftxui::Color::Cyan;
+    if (type == "function" || type == "method" || type == "operator") return ftxui::Color::Yellow;
+    if (type == "string") return ftxui::Color::Green;
+    if (type == "number") return ftxui::Color::Magenta;
+    if (type == "comment") return ftxui::Color::GrayLight;
+    if (type == "macro" || type == "namespace") return ftxui::Color::BlueLight;
+    if (type == "parameter" || type == "variable") return ftxui::Color::White;
+    return ftxui::Color::Default;
+}
+
+// Splits `line` into coloured spans using the tokens that fall on this line.
+// Tokens are assumed sorted by col; gaps between tokens get the default colour.
+// `cursor_col` is used to inject the cursor inversion at the right position.
+ftxui::Element colorize_line(
+    const std::string& line,
+    const std::vector<std::pair<std::size_t, std::pair<std::size_t, std::string>>>& spans,
+    std::optional<std::size_t> cursor_col) {
+    std::vector<ftxui::Element> elems;
+    std::size_t pos = 0;
+
+    auto push_span = [&](std::size_t start, std::size_t end, const std::string& type) {
+        if (start >= end || start >= line.size()) return;
+        end = std::min(end, line.size());
+        std::string text = line.substr(start, end - start);
+        ftxui::Color c = token_color(type);
+
+        if (!cursor_col || *cursor_col < start || *cursor_col >= end) {
+            auto elem = ftxui::text(text);
+            if (c != ftxui::Color::Default) elem = elem | ftxui::color(c);
+            elems.push_back(elem);
+            return;
+        }
+        // Cursor falls inside this span: split into before/at/after.
+        std::size_t rel = *cursor_col - start;
+        if (rel > 0) {
+            auto e = ftxui::text(text.substr(0, rel));
+            if (c != ftxui::Color::Default) e = e | ftxui::color(c);
+            elems.push_back(e);
+        }
+        {
+            auto e = ftxui::text(std::string(1, text[rel])) | ftxui::inverted;
+            if (c != ftxui::Color::Default) e = e | ftxui::color(c);
+            elems.push_back(e);
+        }
+        if (rel + 1 < text.size()) {
+            auto e = ftxui::text(text.substr(rel + 1));
+            if (c != ftxui::Color::Default) e = e | ftxui::color(c);
+            elems.push_back(e);
+        }
+    };
+
+    for (const auto& [col, len_type] : spans) {
+        auto [len, type] = len_type;
+        // Gap before token.
+        if (pos < col) push_span(pos, col, "");
+        push_span(col, col + len, type);
+        pos = col + len;
+    }
+    // Trailing gap.
+    if (pos < line.size()) push_span(pos, line.size(), "");
+
+    // Cursor on empty line or past all tokens.
+    if (cursor_col && elems.empty()) {
+        std::string at = line.empty() ? " " : std::string(1, line[*cursor_col]);
+        elems.push_back(ftxui::text(at) | ftxui::inverted);
+        if (*cursor_col + 1 < line.size())
+            elems.push_back(ftxui::text(line.substr(*cursor_col + 1)));
+    } else if (cursor_col && pos <= *cursor_col) {
+        // Cursor is in the trailing gap; inject it.
+        if (pos < *cursor_col && pos < line.size())
+            elems.push_back(ftxui::text(line.substr(pos, *cursor_col - pos)));
+        std::string at = *cursor_col < line.size() ? std::string(1, line[*cursor_col]) : " ";
+        elems.push_back(ftxui::text(at) | ftxui::inverted);
+        if (*cursor_col + 1 < line.size())
+            elems.push_back(ftxui::text(line.substr(*cursor_col + 1)));
+    }
+
+    if (elems.empty()) return ftxui::text("");
+    return ftxui::hbox(std::move(elems));
+}
+
+}  // namespace
+
 ftxui::Element FtxuiRenderer::render_buffer() const {
     const auto& buf = doc_.buffer();
     const auto& cursor = doc_.cursor();
@@ -35,6 +126,14 @@ ftxui::Element FtxuiRenderer::render_buffer() const {
     std::size_t cursor_col = cursor.col();
 
     auto highlights = lsp_.highlights();
+    auto sem_tokens = lsp_.semantic_tokens();
+
+    // Build a per-line map: line -> sorted list of (col, (length, type)).
+    using SpanList = std::vector<std::pair<std::size_t, std::pair<std::size_t, std::string>>>;
+    std::unordered_map<std::size_t, SpanList> token_map;
+    for (const auto& tok : sem_tokens)
+        token_map[tok.line].emplace_back(tok.col, std::make_pair(tok.length, tok.token_type));
+    // Spans are emitted in LSP order (already sorted by line then col).
 
     std::vector<ftxui::Element> lines;
     lines.reserve(buf.line_count());
@@ -42,7 +141,6 @@ ftxui::Element FtxuiRenderer::render_buffer() const {
     for (std::size_t i = 0; i < buf.line_count(); ++i) {
         std::string line_text(buf.line(i).value_or(""));
 
-        // Check if this line has a document highlight.
         bool is_highlighted = false;
         for (const auto& h : highlights) {
             if (h.line == i) {
@@ -51,25 +149,14 @@ ftxui::Element FtxuiRenderer::render_buffer() const {
             }
         }
 
-        if (i != cursor_line) {
-            auto elem = ftxui::text(line_text);
-            if (is_highlighted) elem = elem | ftxui::bgcolor(ftxui::Color::GrayDark);
-            lines.push_back(elem);
-            continue;
-        }
+        const SpanList empty_spans;
+        const SpanList& spans = token_map.count(i) ? token_map.at(i) : empty_spans;
 
-        std::string before = line_text.substr(0, cursor_col);
-        std::string at =
-            cursor_col < line_text.size() ? std::string(1, line_text[cursor_col]) : " ";
-        std::string after = cursor_col < line_text.size() ? line_text.substr(cursor_col + 1) : "";
-
-        auto cursor_elem = ftxui::hbox({
-            ftxui::text(before),
-            ftxui::text(at) | ftxui::inverted,
-            ftxui::text(after),
-        });
-        if (is_highlighted) cursor_elem = cursor_elem | ftxui::bgcolor(ftxui::Color::GrayDark);
-        lines.push_back(cursor_elem);
+        std::optional<std::size_t> cur =
+            (i == cursor_line) ? std::optional{cursor_col} : std::nullopt;
+        auto elem = colorize_line(line_text, spans, cur);
+        if (is_highlighted) elem = elem | ftxui::bgcolor(ftxui::Color::GrayDark);
+        lines.push_back(elem);
     }
 
     return ftxui::vbox(std::move(lines));

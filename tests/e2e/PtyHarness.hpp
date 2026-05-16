@@ -20,6 +20,7 @@
 #pragma once
 
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace editor::e2e {
@@ -44,6 +45,17 @@ public:
     // each non-empty expected line must appear as a substring of the
     // corresponding trimmed screen line (by position). Returns true on match.
     bool expect_screen(const std::string& expected, int timeout_ms = 2000);
+
+    // Blocks until the status bar line starts exactly with " {mode}  "
+    // (the prefix produced by FtxuiRenderer::render_statusbar). The status
+    // bar is the last non-empty line of the frame. Exact prefix comparison
+    // prevents buffer content from producing a false positive.
+    bool validate_status(std::string_view mode, int timeout_ms = 2000);
+
+    // Blocks until every non-empty line in `expected` (newline-separated)
+    // appears as a substring of at least one line in the buffer region
+    // (all frame lines except the last non-empty status bar line).
+    bool validate_buffer(const std::string& expected, int timeout_ms = 2000);
 
     // Returns the latest decoded frame as a newline-separated string (for
     // failure messages).

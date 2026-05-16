@@ -16,6 +16,8 @@
 #include <thread>
 #include <vector>
 
+#include "EditorScreenFormat.hpp"
+
 namespace editor::e2e {
 
 // Strips ANSI/VT100 escape sequences from a raw PTY chunk.
@@ -177,6 +179,51 @@ std::string PtyHarness::current_frame() const {
         }
     }
     return result;
+}
+
+bool PtyHarness::validate_status(std::string_view mode, int timeout_ms) {
+    std::string prefix = fmt::status_prefix(mode);
+    auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
+    std::unique_lock lock(impl_->mtx);
+    return impl_->cv.wait_until(lock, deadline, [&] {
+        auto frame = extract_latest_frame(impl_->raw_buf);
+        // Find last non-empty line — that is the status bar.
+        for (auto it = frame.rbegin(); it != frame.rend(); ++it) {
+            if (it->empty()) continue;
+            return it->rfind(prefix, 0) == 0;  // exact prefix match
+        }
+        return false;
+    });
+}
+
+bool PtyHarness::validate_buffer(const std::string& expected, int timeout_ms) {
+    std::vector<std::string> expected_lines;
+    std::size_t start = 0;
+    while (start <= expected.size()) {
+        auto end = expected.find('\n', start);
+        if (end == std::string::npos) end = expected.size();
+        expected_lines.push_back(expected.substr(start, end - start));
+        if (end == expected.size()) break;
+        start = end + 1;
+    }
+
+    auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
+    std::unique_lock lock(impl_->mtx);
+    return impl_->cv.wait_until(lock, deadline, [&] {
+        auto frame = extract_latest_frame(impl_->raw_buf);
+        if (frame.empty()) return false;
+        // Drop the last non-empty line (status bar) to get buffer region.
+        std::vector<std::string> buffer_region;
+        bool dropped = false;
+        for (auto it = frame.rbegin(); it != frame.rend(); ++it) {
+            if (!dropped && !it->empty()) {
+                dropped = true;
+                continue;
+            }
+            buffer_region.push_back(*it);
+        }
+        return frame_matches(buffer_region, expected_lines);
+    });
 }
 
 std::string PtyHarness::screen_text() const {

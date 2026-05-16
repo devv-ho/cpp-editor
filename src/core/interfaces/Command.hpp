@@ -22,6 +22,19 @@ enum class Command {
     backspace,
     // Pending (multi-key sequences)
     pending_g,
+    pending_space,
+    // LSP navigation (Normal mode)
+    lsp_definition,
+    lsp_declaration,
+    lsp_implementation,
+    lsp_type_definition,
+    lsp_references,
+    lsp_hover,
+    lsp_rename,
+    lsp_code_action,
+    lsp_formatting,
+    lsp_document_symbol,
+    lsp_workspace_symbol,
     // Quit
     quit,
 };

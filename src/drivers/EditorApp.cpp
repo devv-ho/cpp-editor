@@ -11,6 +11,7 @@ EditorApp::EditorApp(core::Document& doc, core::usecases::LspService& lsp, std::
     : doc_(doc),
       lsp_(lsp),
       uri_(std::move(uri)),
+      input_(lsp_, uri_),
       renderer_(doc_, lsp_, uri_),
       screen_(ftxui::ScreenInteractive::Fullscreen()) {}
 

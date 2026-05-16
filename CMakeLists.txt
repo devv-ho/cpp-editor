@@ -40,6 +40,7 @@ add_library(editor_adapters STATIC
   src/adapters/lsp/ClangdProcess.cpp
   src/core/usecases/LspService.cpp
   src/drivers/FtxuiRenderer.cpp
+  src/drivers/EditorApp.cpp
 )
 target_include_directories(editor_adapters PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_compile_features(editor_adapters PUBLIC cxx_std_23)
@@ -72,4 +73,17 @@ if(UNIT_TEST_SOURCES)
     GTest::gmock_main
   )
   gtest_discover_tests(unit_tests)
+endif()
+
+# ── E2e tests ──────────────────────────────────────────────────────────────────
+file(GLOB_RECURSE E2E_TEST_SOURCES tests/e2e/*.cpp)
+if(E2E_TEST_SOURCES)
+  add_executable(e2e_tests ${E2E_TEST_SOURCES})
+  target_include_directories(e2e_tests PRIVATE tests/e2e)
+  target_link_libraries(e2e_tests PRIVATE GTest::gtest_main)
+  target_compile_definitions(e2e_tests PRIVATE
+    EDITOR_BINARY="$<TARGET_FILE:editor>"
+  )
+  add_dependencies(e2e_tests editor)
+  gtest_discover_tests(e2e_tests)
 endif()

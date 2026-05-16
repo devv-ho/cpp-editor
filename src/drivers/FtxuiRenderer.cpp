@@ -1,50 +1,24 @@
 #include "drivers/FtxuiRenderer.hpp"
 
-#include <ftxui/component/component.hpp>
-#include <ftxui/component/event.hpp>
 #include <ftxui/dom/elements.hpp>
 #include <string>
 #include <vector>
 
-#include "adapters/InputTranslator.hpp"
 #include "core/entities/Diagnostic.hpp"
 #include "core/usecases/EditorMode.hpp"
 
 namespace editor::drivers {
 
-FtxuiRenderer::FtxuiRenderer(core::Document& doc, core::usecases::LspService& lsp, std::string uri)
-    : doc_(doc), lsp_(lsp), uri_(std::move(uri)), screen_(ftxui::ScreenInteractive::Fullscreen()) {}
+FtxuiRenderer::FtxuiRenderer(const core::Document& doc, const core::usecases::LspService& lsp,
+                             const std::string& uri)
+    : doc_(doc), lsp_(lsp), uri_(uri) {}
 
-void FtxuiRenderer::run() {
-    std::function<ftxui::Element()> render_fn = [this]() -> ftxui::Element {
-        return ftxui::vbox({
-            render_buffer() | ftxui::flex,
-            render_diagnostics(),
-            render_statusbar(),
-        });
-    };
-
-    auto component =
-        ftxui::CatchEvent(ftxui::Renderer(render_fn), [this](const ftxui::Event& event) {
-            // Try translating the event to a named Key first.
-            if (auto key = adapters::translate(event)) {
-                // ESC in normal mode quits.
-                if (*key == core::Key::escape && dispatcher_.mode() == core::EditorMode::Normal) {
-                    screen_.ExitLoopClosure()();
-                    return true;
-                }
-                dispatcher_.dispatch(*key, doc_);
-                return true;
-            }
-            // Printable characters in insert mode go directly as chars.
-            if (event.is_character() && dispatcher_.mode() == core::EditorMode::Insert) {
-                dispatcher_.dispatch(event.character()[0], doc_);
-                return true;
-            }
-            return false;
-        });
-
-    screen_.Loop(component);
+ftxui::Element FtxuiRenderer::render(core::EditorMode mode) const {
+    return ftxui::vbox({
+        render_buffer() | ftxui::flex,
+        render_diagnostics(),
+        render_statusbar(mode),
+    });
 }
 
 ftxui::Element FtxuiRenderer::render_buffer() const {
@@ -64,7 +38,6 @@ ftxui::Element FtxuiRenderer::render_buffer() const {
             continue;
         }
 
-        // Render the cursor line: split into before/cursor-char/after.
         std::string before = line_text.substr(0, cursor_col);
         std::string at =
             cursor_col < line_text.size() ? std::string(1, line_text[cursor_col]) : " ";
@@ -80,8 +53,8 @@ ftxui::Element FtxuiRenderer::render_buffer() const {
     return ftxui::vbox(std::move(lines));
 }
 
-ftxui::Element FtxuiRenderer::render_statusbar() const {
-    std::string mode_label = dispatcher_.mode() == core::EditorMode::Normal ? "NORMAL" : "INSERT";
+ftxui::Element FtxuiRenderer::render_statusbar(core::EditorMode mode) const {
+    std::string mode_label = mode == core::EditorMode::Normal ? "NORMAL" : "INSERT";
     return ftxui::hbox({
                ftxui::text(" " + mode_label + " ") | ftxui::inverted,
                ftxui::text("  " + uri_),

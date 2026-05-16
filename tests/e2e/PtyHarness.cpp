@@ -16,32 +16,80 @@
 #include <thread>
 #include <vector>
 
+#include "EditorScreenFormat.hpp"
+
 namespace editor::e2e {
 
-// Strips ANSI/VT100 escape sequences so pattern matching works on plain text.
-// Covers: CSI sequences (ESC [ ... letter), lone ESC + one char, and DCS (ESC P).
+// Strips ANSI/VT100 escape sequences from a raw PTY chunk.
 static std::string strip_ansi(const std::string& s) {
     static const std::regex kAnsi("\x1b(\\[[^a-zA-Z]*[a-zA-Z]|[^\\[])");
     return std::regex_replace(s, kAnsi, "");
+}
+
+// Extracts the latest complete frame from raw_buf.
+// FTXUI emits ESC[?25l (cursor hide) at the start of every frame, then writes
+// the full screen content line by line. The last occurrence of ESC[?25l marks
+// the most recently rendered frame.
+static std::vector<std::string> extract_latest_frame(const std::string& raw_buf) {
+    static const std::string kFrameStart = "\x1b[?25l";
+
+    // Find the last frame boundary.
+    auto pos = raw_buf.rfind(kFrameStart);
+    if (pos == std::string::npos) return {};
+
+    std::string frame_raw = raw_buf.substr(pos + kFrameStart.size());
+    std::string plain = strip_ansi(frame_raw);
+
+    // Split on \r\n or \n, trim trailing whitespace from each line.
+    std::vector<std::string> lines;
+    std::size_t start = 0;
+    while (start < plain.size()) {
+        auto end = plain.find('\n', start);
+        if (end == std::string::npos) end = plain.size();
+        std::string line = plain.substr(start, end - start);
+        // Strip trailing \r and spaces.
+        while (!line.empty() && (line.back() == '\r' || line.back() == ' ')) {
+            line.pop_back();
+        }
+        lines.push_back(line);
+        start = end + 1;
+    }
+    return lines;
+}
+
+// Returns true if every non-empty expected line appears as a substring of at
+// least one screen line. Order is not required; each expected line is matched
+// independently against the full set of screen lines.
+static bool frame_matches(const std::vector<std::string>& screen,
+                          const std::vector<std::string>& expected_lines) {
+    for (const auto& exp : expected_lines) {
+        if (exp.empty()) continue;
+        bool found = false;
+        for (const auto& sline : screen) {
+            if (sline.find(exp) != std::string::npos) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) return false;
+    }
+    return true;
 }
 
 struct PtyHarness::Impl {
     std::thread reader_thread;
     std::mutex mtx;
     std::condition_variable cv;
-    std::string raw_buf;    // raw bytes from PTY (for debug)
-    std::string plain_buf;  // ANSI-stripped, for pattern matching
+    std::string raw_buf;    // raw bytes including ANSI sequences
+    std::string plain_buf;  // accumulated plain text (legacy wait_for)
     std::atomic<bool> running{true};
 };
 
 PtyHarness::PtyHarness(const std::string& binary, std::vector<std::string> args)
     : pty_fd_(-1), pid_(-1), impl_(new Impl) {
-    // Build argv for execvp: [binary, args..., nullptr]
     std::vector<char*> argv;
     argv.push_back(const_cast<char*>(binary.c_str()));
-    for (auto& a : args) {
-        argv.push_back(const_cast<char*>(a.c_str()));
-    }
+    for (auto& a : args) argv.push_back(const_cast<char*>(a.c_str()));
     argv.push_back(nullptr);
 
     struct winsize ws{};
@@ -49,14 +97,10 @@ PtyHarness::PtyHarness(const std::string& binary, std::vector<std::string> args)
     ws.ws_row = 50;
 
     pid_ = forkpty(&pty_fd_, nullptr, nullptr, &ws);
-    if (pid_ < 0) {
-        throw std::runtime_error(std::string("forkpty failed: ") + strerror(errno));
-    }
+    if (pid_ < 0) throw std::runtime_error(std::string("forkpty failed: ") + strerror(errno));
 
     if (pid_ == 0) {
-        // Child: exec the editor binary.
         execvp(binary.c_str(), argv.data());
-        // execvp only returns on failure.
         std::perror("execvp");
         _exit(127);
     }
@@ -65,11 +109,8 @@ PtyHarness::PtyHarness(const std::string& binary, std::vector<std::string> args)
 }
 
 PtyHarness::~PtyHarness() {
-    // Kill the child first so clangd's subprocess pipe closes, then close the
-    // PTY master fd so the reader thread's ::read() unblocks and can be joined.
     if (pid_ > 0) {
         kill(pid_, SIGTERM);
-        // Give it 500ms to exit gracefully, then force-kill.
         for (int i = 0; i < 10; ++i) {
             int status;
             if (waitpid(pid_, &status, WNOHANG) == pid_) {
@@ -107,6 +148,84 @@ void PtyHarness::write(const std::string& data) {
     }
 }
 
+bool PtyHarness::expect_screen(const std::string& expected, int timeout_ms) {
+    // Parse expected into lines.
+    std::vector<std::string> expected_lines;
+    std::size_t start = 0;
+    while (start <= expected.size()) {
+        auto end = expected.find('\n', start);
+        if (end == std::string::npos) end = expected.size();
+        expected_lines.push_back(expected.substr(start, end - start));
+        if (end == expected.size()) break;
+        start = end + 1;
+    }
+
+    auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
+    std::unique_lock lock(impl_->mtx);
+    return impl_->cv.wait_until(lock, deadline, [&] {
+        auto frame = extract_latest_frame(impl_->raw_buf);
+        return frame_matches(frame, expected_lines);
+    });
+}
+
+std::string PtyHarness::current_frame() const {
+    std::lock_guard lock(impl_->mtx);
+    auto lines = extract_latest_frame(impl_->raw_buf);
+    std::string result;
+    for (auto& l : lines) {
+        if (!l.empty()) {
+            result += l;
+            result += '\n';
+        }
+    }
+    return result;
+}
+
+bool PtyHarness::validate_status(std::string_view mode, int timeout_ms) {
+    std::string prefix = fmt::status_prefix(mode);
+    auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
+    std::unique_lock lock(impl_->mtx);
+    return impl_->cv.wait_until(lock, deadline, [&] {
+        auto frame = extract_latest_frame(impl_->raw_buf);
+        // Find last non-empty line — that is the status bar.
+        for (auto it = frame.rbegin(); it != frame.rend(); ++it) {
+            if (it->empty()) continue;
+            return it->rfind(prefix, 0) == 0;  // exact prefix match
+        }
+        return false;
+    });
+}
+
+bool PtyHarness::validate_buffer(const std::string& expected, int timeout_ms) {
+    std::vector<std::string> expected_lines;
+    std::size_t start = 0;
+    while (start <= expected.size()) {
+        auto end = expected.find('\n', start);
+        if (end == std::string::npos) end = expected.size();
+        expected_lines.push_back(expected.substr(start, end - start));
+        if (end == expected.size()) break;
+        start = end + 1;
+    }
+
+    auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
+    std::unique_lock lock(impl_->mtx);
+    return impl_->cv.wait_until(lock, deadline, [&] {
+        auto frame = extract_latest_frame(impl_->raw_buf);
+        if (frame.empty()) return false;
+        // Drop the last non-empty line (status bar) to get buffer region.
+        std::vector<std::string> buffer_region;
+        bool dropped = false;
+        for (auto it = frame.rbegin(); it != frame.rend(); ++it) {
+            if (!dropped && !it->empty()) {
+                dropped = true;
+                continue;
+            }
+            buffer_region.push_back(*it);
+        }
+        return frame_matches(buffer_region, expected_lines);
+    });
+}
+
 std::string PtyHarness::screen_text() const {
     std::lock_guard lock(impl_->mtx);
     return impl_->plain_buf;
@@ -138,11 +257,9 @@ void PtyHarness::start_reader() {
         char chunk[4096];
         while (impl_->running.load()) {
             ssize_t n = ::read(pty_fd_, chunk, sizeof(chunk));
-            if (n <= 0) {
-                break;  // PTY closed (editor exited)
-            }
+            if (n <= 0) break;
+            std::string chunk_str(chunk, static_cast<std::size_t>(n));
             {
-                std::string chunk_str(chunk, static_cast<std::size_t>(n));
                 std::lock_guard lock(impl_->mtx);
                 impl_->raw_buf += chunk_str;
                 impl_->plain_buf += strip_ansi(chunk_str);
@@ -154,9 +271,7 @@ void PtyHarness::start_reader() {
 
 void PtyHarness::stop_reader() {
     impl_->running.store(false);
-    if (impl_->reader_thread.joinable()) {
-        impl_->reader_thread.join();
-    }
+    if (impl_->reader_thread.joinable()) impl_->reader_thread.join();
 }
 
 }  // namespace editor::e2e

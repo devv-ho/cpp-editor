@@ -6,6 +6,7 @@
 
 #include "core/entities/Diagnostic.hpp"
 #include "core/usecases/EditorMode.hpp"
+#include "drivers/ScreenFormat.hpp"
 
 namespace editor::drivers {
 
@@ -54,10 +55,13 @@ ftxui::Element FtxuiRenderer::render_buffer() const {
 }
 
 ftxui::Element FtxuiRenderer::render_statusbar(core::EditorMode mode) const {
-    std::string mode_label = mode == core::EditorMode::Normal ? "NORMAL" : "INSERT";
+    using namespace screen_fmt;
+    std::string_view mode_label = mode == core::EditorMode::Normal ? kNormal : kInsert;
     return ftxui::hbox({
-               ftxui::text(" " + mode_label + " ") | ftxui::inverted,
-               ftxui::text("  " + uri_),
+               ftxui::text(std::string(kModeLeading) + std::string(mode_label) +
+                           std::string(kModeTrailing)) |
+                   ftxui::inverted,
+               ftxui::text(std::string(kUriSeparator) + uri_),
            }) |
            ftxui::bold;
 }

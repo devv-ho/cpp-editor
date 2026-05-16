@@ -59,8 +59,12 @@ public:
     void move_top() noexcept { pos_ = {0, 0}; }
 
     // G -- last line, first column.
+    // A trailing empty line (artifact of split on a newline-terminated file)
+    // is skipped so G lands on the last content line, matching Vim behaviour.
     void move_bottom() noexcept {
-        pos_.line = buffer_.line_count() - 1;
+        std::size_t last = buffer_.line_count() - 1;
+        if (last > 0 && buffer_.line_length(last) == 0) --last;
+        pos_.line = last;
         pos_.col = 0;
     }
 

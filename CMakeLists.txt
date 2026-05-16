@@ -79,7 +79,7 @@ endif()
 file(GLOB_RECURSE E2E_TEST_SOURCES tests/e2e/*.cpp)
 if(E2E_TEST_SOURCES)
   add_executable(e2e_tests ${E2E_TEST_SOURCES})
-  target_include_directories(e2e_tests PRIVATE tests/e2e)
+  target_include_directories(e2e_tests PRIVATE tests/e2e ${CMAKE_CURRENT_SOURCE_DIR}/src)
   target_link_libraries(e2e_tests PRIVATE GTest::gtest_main)
   target_compile_definitions(e2e_tests PRIVATE
     EDITOR_BINARY="$<TARGET_FILE:editor>"

@@ -19,7 +19,7 @@ void EditorApp::run() {
     core::EditorMode current_mode = core::EditorMode::Normal;
 
     // Wake the FTXUI event loop whenever LSP data arrives asynchronously.
-    lsp_.set_on_update([this] { screen_.PostEvent(ftxui::Event::Custom); });
+    lsp_.set_on_update([this] { screen_.Post(ftxui::Event::Custom); });
 
     std::function<ftxui::Element()> render_fn = [this, &current_mode] {
         return renderer_.render(current_mode);

@@ -415,7 +415,6 @@ void LspService::handshake() {
                         {"multilineTokenSupport", false},
                         {"overlappingTokenSupport", false}}}}}}}},
                  [this](const nlohmann::json& result) {
-                     // result is already msg.result (the "result" field value).
                      if (!result.contains("capabilities")) return;
                      const auto& srv = result["capabilities"];
                      if (!srv.contains("semanticTokensProvider")) return;

@@ -1,5 +1,6 @@
 #include "drivers/FtxuiRenderer.hpp"
 
+#include <algorithm>
 #include <ftxui/dom/elements.hpp>
 #include <optional>
 #include <string>
@@ -9,6 +10,7 @@
 #include "core/entities/Diagnostic.hpp"
 #include "core/usecases/EditorMode.hpp"
 #include "drivers/ScreenFormat.hpp"
+#include "drivers/SyntaxHighlighter.hpp"
 
 namespace editor::drivers {
 
@@ -41,8 +43,11 @@ ftxui::Color token_color(const std::string& type) {
     if (type == "string") return ftxui::Color::Green;
     if (type == "number") return ftxui::Color::Magenta;
     if (type == "comment") return ftxui::Color::GrayLight;
-    if (type == "macro" || type == "namespace") return ftxui::Color::BlueLight;
-    if (type == "parameter" || type == "variable") return ftxui::Color::White;
+    if (type == "macro" || type == "namespace" || type == "preprocessor")
+        return ftxui::Color::BlueLight;
+    if (type == "parameter" || type == "variable") return ftxui::Color::Default;
+    if (type == "syn_operator") return ftxui::Color::Cyan;
+    if (type == "bracket") return ftxui::Color::White;
     return ftxui::Color::Default;
 }
 
@@ -94,23 +99,15 @@ ftxui::Element colorize_line(
         push_span(col, col + len, type);
         pos = col + len;
     }
-    // Trailing gap.
-    if (pos < line.size()) push_span(pos, line.size(), "");
-
-    // Cursor on empty line or past all tokens.
-    if (cursor_col && elems.empty()) {
-        std::string at = line.empty() ? " " : std::string(1, line[*cursor_col]);
-        elems.push_back(ftxui::text(at) | ftxui::inverted);
-        if (*cursor_col + 1 < line.size())
-            elems.push_back(ftxui::text(line.substr(*cursor_col + 1)));
-    } else if (cursor_col && pos <= *cursor_col) {
-        // Cursor is in the trailing gap; inject it.
-        if (pos < *cursor_col && pos < line.size())
-            elems.push_back(ftxui::text(line.substr(pos, *cursor_col - pos)));
-        std::string at = *cursor_col < line.size() ? std::string(1, line[*cursor_col]) : " ";
-        elems.push_back(ftxui::text(at) | ftxui::inverted);
-        if (*cursor_col + 1 < line.size())
-            elems.push_back(ftxui::text(line.substr(*cursor_col + 1)));
+    // Trailing gap (includes cursor if it falls past all tokens).
+    if (pos < line.size()) {
+        push_span(pos, line.size(), "");
+    } else if (cursor_col && elems.empty()) {
+        // Empty line: show cursor block.
+        elems.push_back(ftxui::text(" ") | ftxui::inverted);
+    } else if (cursor_col && *cursor_col >= line.size()) {
+        // Cursor past end of line (e.g. on trailing newline position).
+        elems.push_back(ftxui::text(" ") | ftxui::inverted);
     }
 
     if (elems.empty()) return ftxui::text("");

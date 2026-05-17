@@ -1,5 +1,6 @@
 #include "adapters/lsp/ClangdProcess.hpp"
 
+#include <fcntl.h>
 #include <signal.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -41,6 +42,9 @@ ClangdProcess::ClangdProcess(std::string_view clangd_path) {
         // execvp fails -- execution never falls through to the parent code.
         dup2(to_child[kReadEnd], STDIN_FILENO);
         dup2(from_child[kWriteEnd], STDOUT_FILENO);
+        // Suppress clangd's stderr so its log lines don't corrupt the TUI.
+        int devnull = open("/dev/null", O_WRONLY);
+        if (devnull >= 0) dup2(devnull, STDERR_FILENO);
 
         close(to_child[kReadEnd]);
         close(to_child[kWriteEnd]);

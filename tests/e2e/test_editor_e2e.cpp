@@ -9,14 +9,20 @@
 //   Each non-empty line in `expected` must appear as a substring of at least
 //   one line in the buffer region (all frame lines except the status bar).
 //
-// Use fmt::kNormal / fmt::kInsert as mode tokens — defined in EditorScreenFormat.hpp
+// Use fmt::kNormal / fmt::kInsert as mode tokens -- defined in EditorScreenFormat.hpp
 // alongside FtxuiRenderer's format so a renderer change only needs one update.
+//
+// LSP tests require clangd on PATH. They are skipped automatically when clangd
+// is absent so the suite stays green in environments without a toolchain.
 
 #include <gtest/gtest.h>
 
+#include <chrono>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <string>
+#include <thread>
 
 #include "EditorScreenFormat.hpp"
 #include "PtyHarness.hpp"
@@ -33,6 +39,8 @@ std::string make_temp(const std::string& content) {
     f << content;
     return path.string();
 }
+
+bool clangd_available() { return std::system("which clangd > /dev/null 2>&1") == 0; }
 
 }  // namespace
 
@@ -273,4 +281,118 @@ TEST(EditorE2e, GGMovesToFirstLine) {
 
     EXPECT_TRUE(h.validate_buffer(fmt::buffer_line("Xfoo"), 2000)) << h.current_frame();
     EXPECT_TRUE(h.validate_status(fmt::kInsert, 2000)) << h.current_frame();
+}
+
+// ── LSP / diagnostics ─────────────────────────────────────────────────────────
+// These tests require clangd on PATH. Skipped automatically when absent.
+
+TEST(EditorE2eLsp, DiagnosticsAppearsForInvalidCpp) {
+    if (!clangd_available()) GTEST_SKIP() << "clangd not found";
+
+    // Intentional syntax error: missing semicolon.
+    auto path = make_temp("int main() { return 0 }\n");
+    PtyHarness h(EDITOR_BINARY, {path});
+
+    ASSERT_TRUE(h.validate_status(fmt::kNormal, 3000));
+
+    // clangd may take a moment to analyse; allow up to 10 s.
+    EXPECT_TRUE(h.validate_buffer(fmt::diag_prefix(fmt::kDiagError), 10000))
+        << "expected [E] diagnostic on screen:\n"
+        << h.current_frame();
+}
+
+TEST(EditorE2eLsp, NoDiagnosticsForValidCpp) {
+    if (!clangd_available()) GTEST_SKIP() << "clangd not found";
+
+    auto path = make_temp("int main() { return 0; }\n");
+    PtyHarness h(EDITOR_BINARY, {path});
+
+    ASSERT_TRUE(h.validate_status(fmt::kNormal, 3000));
+
+    // Give clangd time to send a (clean) publishDiagnostics, then verify no
+    // [E] or [W] appears in the buffer region.
+    std::this_thread::sleep_for(std::chrono::seconds(5));
+    EXPECT_FALSE(h.validate_buffer(fmt::diag_prefix(fmt::kDiagError), 0))
+        << "unexpected [E] on screen:\n"
+        << h.current_frame();
+    EXPECT_FALSE(h.validate_buffer(fmt::diag_prefix(fmt::kDiagWarning), 0))
+        << "unexpected [W] on screen:\n"
+        << h.current_frame();
+}
+
+// ── LSP key binding smoke tests ───────────────────────────────────────────────
+// Verify that sending LSP key sequences does not crash or hang the editor.
+// The editor must still be in Normal mode after each sequence.
+// These tests do NOT assert on overlay panel content -- that depends on clangd
+// latency and is covered in unit tests via mock callbacks.
+
+TEST(EditorE2eLsp, GDDoesNotCrash) {
+    if (!clangd_available()) GTEST_SKIP() << "clangd not found";
+    auto path = make_temp("int main() { return 0; }\n");
+    PtyHarness h(EDITOR_BINARY, {path});
+    ASSERT_TRUE(h.validate_status(fmt::kNormal, 3000));
+    h.write("g");
+    h.write("d");
+    EXPECT_TRUE(h.validate_status(fmt::kNormal, 2000))
+        << "editor crashed or changed mode after gd:\n"
+        << h.current_frame();
+}
+
+TEST(EditorE2eLsp, GRDoesNotCrash) {
+    if (!clangd_available()) GTEST_SKIP() << "clangd not found";
+    auto path = make_temp("int main() { return 0; }\n");
+    PtyHarness h(EDITOR_BINARY, {path});
+    ASSERT_TRUE(h.validate_status(fmt::kNormal, 3000));
+    h.write("g");
+    h.write("r");
+    EXPECT_TRUE(h.validate_status(fmt::kNormal, 2000))
+        << "editor crashed or changed mode after gr:\n"
+        << h.current_frame();
+}
+
+TEST(EditorE2eLsp, KHoverDoesNotCrash) {
+    if (!clangd_available()) GTEST_SKIP() << "clangd not found";
+    auto path = make_temp("int main() { return 0; }\n");
+    PtyHarness h(EDITOR_BINARY, {path});
+    ASSERT_TRUE(h.validate_status(fmt::kNormal, 3000));
+    h.write("K");
+    EXPECT_TRUE(h.validate_status(fmt::kNormal, 2000))
+        << "editor crashed or changed mode after K:\n"
+        << h.current_frame();
+}
+
+TEST(EditorE2eLsp, SpaceSDocumentSymbolDoesNotCrash) {
+    if (!clangd_available()) GTEST_SKIP() << "clangd not found";
+    auto path = make_temp("int main() { return 0; }\n");
+    PtyHarness h(EDITOR_BINARY, {path});
+    ASSERT_TRUE(h.validate_status(fmt::kNormal, 3000));
+    h.write(" ");
+    h.write("s");
+    EXPECT_TRUE(h.validate_status(fmt::kNormal, 2000))
+        << "editor crashed or changed mode after <Space>s:\n"
+        << h.current_frame();
+}
+
+TEST(EditorE2eLsp, SpaceFFormattingDoesNotCrash) {
+    if (!clangd_available()) GTEST_SKIP() << "clangd not found";
+    auto path = make_temp("int main() { return 0; }\n");
+    PtyHarness h(EDITOR_BINARY, {path});
+    ASSERT_TRUE(h.validate_status(fmt::kNormal, 3000));
+    h.write(" ");
+    h.write("f");
+    EXPECT_TRUE(h.validate_status(fmt::kNormal, 2000))
+        << "editor crashed or changed mode after <Space>f:\n"
+        << h.current_frame();
+}
+
+TEST(EditorE2eLsp, MotionAfterLspKeyClearsOverlay) {
+    if (!clangd_available()) GTEST_SKIP() << "clangd not found";
+    // K requests hover, then 'l' moves cursor. Editor must remain in Normal mode.
+    auto path = make_temp("int main() { return 0; }\n");
+    PtyHarness h(EDITOR_BINARY, {path});
+    ASSERT_TRUE(h.validate_status(fmt::kNormal, 3000));
+    h.write("K");
+    h.write("l");
+    EXPECT_TRUE(h.validate_status(fmt::kNormal, 2000)) << "editor crashed after K then l:\n"
+                                                       << h.current_frame();
 }

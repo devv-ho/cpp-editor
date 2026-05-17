@@ -1,11 +1,13 @@
 #pragma once
 
 #include <ftxui/component/event.hpp>
+#include <string>
 
 #include "adapters/InputTranslator.hpp"
 #include "core/entities/Document.hpp"
 #include "core/usecases/EditorMode.hpp"
 #include "core/usecases/InputDispatcher.hpp"
+#include "core/usecases/LspService.hpp"
 
 namespace editor::adapters {
 
@@ -16,6 +18,9 @@ struct DispatchResult {
 
 class InputAdapter {
 public:
+    InputAdapter(core::usecases::LspService& lsp, std::string uri)
+        : dispatcher_(lsp, std::move(uri)) {}
+
     DispatchResult process(const ftxui::Event& event, core::Document& doc) {
         if (auto cmd = translate(event, mode_)) {
             if (*cmd == core::Command::quit) return {.quit = true, .mode = mode_};

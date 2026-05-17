@@ -2,6 +2,7 @@
 
 #include <ftxui/component/component.hpp>
 #include <ftxui/component/event.hpp>
+#include <ftxui/screen/terminal.hpp>
 
 #include "core/usecases/EditorMode.hpp"
 
@@ -22,6 +23,10 @@ void EditorApp::run() {
     lsp_.set_on_update([this] { screen_.Post(ftxui::Event::Custom); });
 
     std::function<ftxui::Element()> render_fn = [this, &current_mode] {
+        // InstallTerminalInfo (called during Loop startup) may downgrade color
+        // support based on DA1/DA2 responses. Force TrueColor so that our
+        // ftxui::color() decorators are not silently stripped.
+        ftxui::Terminal::SetColorSupport(ftxui::Terminal::Color::TrueColor);
         return renderer_.render(current_mode);
     };
 

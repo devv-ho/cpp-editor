@@ -154,6 +154,7 @@ ftxui::Element FtxuiRenderer::render_buffer() const {
 
         std::optional<std::size_t> cur =
             (i == cursor_line) ? std::optional{cursor_col} : std::nullopt;
+
         auto elem = colorize_line(line_text, spans, cur);
         if (is_highlighted) elem = elem | ftxui::bgcolor(ftxui::Color::GrayDark);
         lines.push_back(elem);

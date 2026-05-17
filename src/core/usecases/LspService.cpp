@@ -234,8 +234,9 @@ void LspService::semantic_tokens_full(const std::string& uri, SemanticTokensCall
     if (!config_.lsp.semantic_tokens) return;
     send_request("textDocument/semanticTokens/full", {{"textDocument", {{"uri", uri}}}},
                  [this, cb = std::move(cb)](const nlohmann::json& result) {
-                     if (!result.contains("result") || result["result"].is_null()) return;
-                     auto toks = parse_semantic_tokens(result["result"]);
+                     // result is already msg.result (the "result" field value).
+                     if (result.is_null()) return;
+                     auto toks = parse_semantic_tokens(result);
                      cb(toks);
                  });
 }
@@ -416,11 +417,9 @@ void LspService::handshake() {
                         {"multilineTokenSupport", false},
                         {"overlappingTokenSupport", false}}}}}}}},
                  [this](const nlohmann::json& result) {
-                     // Store token type legend from server capabilities.
-                     if (!result.contains("result")) return;
-                     const auto& caps = result["result"];
-                     if (!caps.contains("capabilities")) return;
-                     const auto& srv = caps["capabilities"];
+                     // result is already msg.result (the "result" field value).
+                     if (!result.contains("capabilities")) return;
+                     const auto& srv = result["capabilities"];
                      if (!srv.contains("semanticTokensProvider")) return;
                      const auto& prov = srv["semanticTokensProvider"];
                      if (!prov.contains("legend")) return;

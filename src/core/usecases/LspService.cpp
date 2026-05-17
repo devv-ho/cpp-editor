@@ -29,8 +29,7 @@ void LspService::did_open(const std::string& uri, const std::string& text) {
     send_notification(
         "textDocument/didOpen",
         {{"textDocument", {{"uri", uri}, {"languageId", "cpp"}, {"version", 1}, {"text", text}}}});
-    if (config_.lsp.semantic_tokens)
-        semantic_tokens_full(uri, [this](auto toks) { set_semantic_tokens(std::move(toks)); });
+    // Semantic tokens are requested after publishDiagnostics arrives (file ready signal).
 }
 
 void LspService::did_change(const std::string& uri, const std::string& text, int version) {
@@ -38,8 +37,7 @@ void LspService::did_change(const std::string& uri, const std::string& text, int
     send_notification("textDocument/didChange",
                       {{"textDocument", {{"uri", uri}, {"version", version}}},
                        {"contentChanges", nlohmann::json::array({{{"text", text}}})}});
-    if (config_.lsp.semantic_tokens)
-        semantic_tokens_full(uri, [this](auto toks) { set_semantic_tokens(std::move(toks)); });
+    // Semantic tokens refreshed after publishDiagnostics arrives.
 }
 
 void LspService::did_save(const std::string& uri) {
@@ -498,6 +496,10 @@ void LspService::handle_diagnostics(const nlohmann::json& params) {
         diagnostics_[uri] = std::move(diags);
     }
     if (on_update_) on_update_();
+    // publishDiagnostics means clangd finished analysing the file -- safe to
+    // request semantic tokens now (legend is also guaranteed to be stored).
+    if (config_.lsp.semantic_tokens)
+        semantic_tokens_full(uri, [this](auto toks) { set_semantic_tokens(std::move(toks)); });
 }
 
 // ── Static helpers ────────────────────────────────────────────────────────────

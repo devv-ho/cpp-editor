@@ -92,3 +92,82 @@ TEST(InputTranslatorTest, Insert_TypingCharsReturnInsertChar) {
     EXPECT_EQ(translate(ftxui::Event::Character('z'), EditorMode::Insert), Command::insert_char);
     EXPECT_EQ(translate(ftxui::Event::Character('i'), EditorMode::Insert), Command::insert_char);
 }
+
+// -- Normal mode: LSP and multi-key prefix keys --------------------------------
+
+TEST(InputTranslatorTest, Normal_KUpperIslspHover) {
+    EXPECT_EQ(translate(ftxui::Event::Character('K'), EditorMode::Normal), Command::lsp_hover);
+}
+
+TEST(InputTranslatorTest, Normal_SpaceIsPendingSpace) {
+    EXPECT_EQ(translate(ftxui::Event::Character(' '), EditorMode::Normal), Command::pending_space);
+}
+
+// Second keys for g* sequences (resolved by dispatcher in AfterG state).
+TEST(InputTranslatorTest, Normal_D_IsLspDefinition) {
+    EXPECT_EQ(translate(ftxui::Event::Character('d'), EditorMode::Normal), Command::lsp_definition);
+}
+
+TEST(InputTranslatorTest, Normal_DUpper_IsLspDeclaration) {
+    EXPECT_EQ(translate(ftxui::Event::Character('D'), EditorMode::Normal),
+              Command::lsp_declaration);
+}
+
+TEST(InputTranslatorTest, Normal_IUpper_IsLspImplementation) {
+    // 'I' (uppercase) maps to lsp_implementation to avoid collision with 'i'=enter_insert.
+    EXPECT_EQ(translate(ftxui::Event::Character('I'), EditorMode::Normal),
+              Command::lsp_implementation);
+}
+
+TEST(InputTranslatorTest, Normal_ILower_IsEnterInsert_NotLspImplementation) {
+    // 'i' (lowercase) must NOT map to lsp_implementation.
+    EXPECT_NE(translate(ftxui::Event::Character('i'), EditorMode::Normal),
+              Command::lsp_implementation);
+    EXPECT_EQ(translate(ftxui::Event::Character('i'), EditorMode::Normal), Command::enter_insert);
+}
+
+TEST(InputTranslatorTest, Normal_Y_IsLspTypeDefinition) {
+    EXPECT_EQ(translate(ftxui::Event::Character('y'), EditorMode::Normal),
+              Command::lsp_type_definition);
+}
+
+TEST(InputTranslatorTest, Normal_R_IsLspReferences) {
+    EXPECT_EQ(translate(ftxui::Event::Character('r'), EditorMode::Normal), Command::lsp_references);
+}
+
+TEST(InputTranslatorTest, Normal_N_IsLspRename) {
+    EXPECT_EQ(translate(ftxui::Event::Character('n'), EditorMode::Normal), Command::lsp_rename);
+}
+
+TEST(InputTranslatorTest, Normal_C_IsLspCodeAction) {
+    EXPECT_EQ(translate(ftxui::Event::Character('c'), EditorMode::Normal),
+              Command::lsp_code_action);
+}
+
+TEST(InputTranslatorTest, Normal_AUpper_IsLspCodeAction) {
+    // 'A' (uppercase) is the confirm key for <Space>cA; must map to lsp_code_action.
+    EXPECT_EQ(translate(ftxui::Event::Character('A'), EditorMode::Normal),
+              Command::lsp_code_action);
+}
+
+TEST(InputTranslatorTest, Normal_ALower_IsEnterInsertAfter_NotCodeAction) {
+    // 'a' (lowercase) must NOT map to lsp_code_action.
+    EXPECT_NE(translate(ftxui::Event::Character('a'), EditorMode::Normal),
+              Command::lsp_code_action);
+    EXPECT_EQ(translate(ftxui::Event::Character('a'), EditorMode::Normal),
+              Command::enter_insert_after);
+}
+
+TEST(InputTranslatorTest, Normal_F_IsLspFormatting) {
+    EXPECT_EQ(translate(ftxui::Event::Character('f'), EditorMode::Normal), Command::lsp_formatting);
+}
+
+TEST(InputTranslatorTest, Normal_SLower_IsLspDocumentSymbol) {
+    EXPECT_EQ(translate(ftxui::Event::Character('s'), EditorMode::Normal),
+              Command::lsp_document_symbol);
+}
+
+TEST(InputTranslatorTest, Normal_SUpper_IsLspWorkspaceSymbol) {
+    EXPECT_EQ(translate(ftxui::Event::Character('S'), EditorMode::Normal),
+              Command::lsp_workspace_symbol);
+}

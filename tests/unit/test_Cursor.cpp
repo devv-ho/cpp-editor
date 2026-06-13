@@ -137,3 +137,38 @@ TEST_F(CursorFixture, SetPositionClampsOutOfRangeCol) {
     cur_.set_position({0, 99});
     EXPECT_EQ(cur_.col(), 4u);
 }
+
+// -- move_bottom: trailing newline skips empty last line ----------------------
+
+TEST(CursorMoveBottomTest, TrailingNewlineSkipsEmptyLastLine) {
+    // "foo\nbar\n" → lines = ["foo", "bar", ""] (3 lines).
+    // move_bottom() must land on "bar" (line 1), not "" (line 2).
+    Buffer buf = Buffer::from_text("foo\nbar\n");
+    Cursor cur{buf};
+    cur.move_bottom();
+    EXPECT_EQ(cur.line(), 1u);
+    EXPECT_EQ(cur.col(), 0u);
+}
+
+TEST(CursorMoveBottomTest, NoTrailingNewlineLandsOnLastLine) {
+    // "foo\nbar" → lines = ["foo", "bar"] (2 lines, no trailing empty).
+    Buffer buf = Buffer::from_text("foo\nbar");
+    Cursor cur{buf};
+    cur.move_bottom();
+    EXPECT_EQ(cur.line(), 1u);
+}
+
+TEST(CursorMoveBottomTest, SingleLineNoTrailingNewline) {
+    Buffer buf = Buffer::from_text("hello");
+    Cursor cur{buf};
+    cur.move_bottom();
+    EXPECT_EQ(cur.line(), 0u);
+}
+
+TEST(CursorMoveBottomTest, SingleLineWithTrailingNewline) {
+    // "hello\n" → lines = ["hello", ""] → must land on "hello" (line 0).
+    Buffer buf = Buffer::from_text("hello\n");
+    Cursor cur{buf};
+    cur.move_bottom();
+    EXPECT_EQ(cur.line(), 0u);
+}

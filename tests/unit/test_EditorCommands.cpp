@@ -403,3 +403,153 @@ TEST(InputDispatcherTest, InsertCharCallsDidChange) {
     EXPECT_NO_THROW(d.dispatch(Command::insert_char, EditorMode::Insert, doc, 'X'));
     EXPECT_EQ(doc.line(0).value(), "Xhello");
 }
+
+// -- InputAdapter integration: real key sequences through translate+dispatch ---
+// These tests go through InputAdapter::process() which calls translate() then
+// dispatch(), catching bugs where translate()'s Command output doesn't match
+// what the dispatcher's pending-state handler expects.
+
+#include "adapters/InputAdapter.hpp"
+using editor::adapters::InputAdapter;
+
+// Helper: feed a sequence of character events through InputAdapter.
+static editor::core::EditorMode send_keys(InputAdapter& adapter, editor::core::Document& doc,
+                                          std::string_view keys) {
+    editor::core::EditorMode mode = editor::core::EditorMode::Normal;
+    for (char ch : keys) {
+        auto result = adapter.process(ftxui::Event::Character(std::string(1, ch)), doc);
+        mode = result.mode;
+    }
+    return mode;
+}
+
+TEST(InputAdapterIntegrationTest, LowerI_EntersInsertMode) {
+    Document doc{"hello"};
+    TestLsp lsp_;
+    InputAdapter adapter(*lsp_.service, "file:///test.cpp");
+    auto mode = send_keys(adapter, doc, "i");
+    EXPECT_EQ(mode, EditorMode::Insert);
+}
+
+TEST(InputAdapterIntegrationTest, LowerA_EntersInsertModeAndAdvancesCursor) {
+    Document doc{"hello"};
+    TestLsp lsp_;
+    InputAdapter adapter(*lsp_.service, "file:///test.cpp");
+    auto mode = send_keys(adapter, doc, "a");
+    EXPECT_EQ(mode, EditorMode::Insert);
+    EXPECT_EQ(doc.position().col, 1u);
+}
+
+TEST(InputAdapterIntegrationTest, GI_DoesNotEnterInsertMode) {
+    // 'g' then 'I' (uppercase) → gI → lsp_implementation, stays Normal.
+    Document doc{"hello"};
+    TestLsp lsp_;
+    InputAdapter adapter(*lsp_.service, "file:///test.cpp");
+    auto mode = send_keys(adapter, doc, "gI");
+    EXPECT_EQ(mode, EditorMode::Normal);
+}
+
+TEST(InputAdapterIntegrationTest, GI_vs_Gi_Differ) {
+    // 'gi' (lowercase i after g) — 'i' is enter_insert, swallowed in AfterG → stays Normal.
+    // 'gI' (uppercase I after g) — lsp_implementation → stays Normal.
+    // Both stay Normal but for different reasons; key point: neither enters Insert mode.
+    Document doc{"hello"};
+    TestLsp lsp_;
+    InputAdapter a1(*lsp_.service, "file:///test.cpp");
+    InputAdapter a2(*lsp_.service, "file:///test.cpp");
+    EXPECT_EQ(send_keys(a1, doc, "gi"), EditorMode::Normal);
+    EXPECT_EQ(send_keys(a2, doc, "gI"), EditorMode::Normal);
+}
+
+TEST(InputAdapterIntegrationTest, SpaceCUpperA_DoesNotEnterInsertMode) {
+    // <Space>cA (uppercase A) → lsp_code_action confirm, stays Normal.
+    Document doc{"hello"};
+    TestLsp lsp_;
+    InputAdapter adapter(*lsp_.service, "file:///test.cpp");
+    auto mode = send_keys(adapter, doc, " cA");
+    EXPECT_EQ(mode, EditorMode::Normal);
+}
+
+TEST(InputAdapterIntegrationTest, SpaceCLowerA_DoesNotEnterInsertMode) {
+    // <Space>ca (lowercase a after <Space>c) — 'a' is enter_insert_after which is
+    // swallowed in AfterSpaceC state → stays Normal (code action not fired, but
+    // crucially does NOT switch to Insert mode).
+    Document doc{"hello"};
+    TestLsp lsp_;
+    InputAdapter adapter(*lsp_.service, "file:///test.cpp");
+    auto mode = send_keys(adapter, doc, " ca");
+    EXPECT_EQ(mode, EditorMode::Normal);
+}
+
+TEST(InputAdapterIntegrationTest, GD_StaysNormal) {
+    Document doc{"hello"};
+    TestLsp lsp_;
+    InputAdapter adapter(*lsp_.service, "file:///test.cpp");
+    EXPECT_EQ(send_keys(adapter, doc, "gd"), EditorMode::Normal);
+}
+
+TEST(InputAdapterIntegrationTest, GCapitalD_StaysNormal) {
+    Document doc{"hello"};
+    TestLsp lsp_;
+    InputAdapter adapter(*lsp_.service, "file:///test.cpp");
+    EXPECT_EQ(send_keys(adapter, doc, "gD"), EditorMode::Normal);
+}
+
+TEST(InputAdapterIntegrationTest, GY_StaysNormal) {
+    Document doc{"hello"};
+    TestLsp lsp_;
+    InputAdapter adapter(*lsp_.service, "file:///test.cpp");
+    EXPECT_EQ(send_keys(adapter, doc, "gy"), EditorMode::Normal);
+}
+
+TEST(InputAdapterIntegrationTest, GR_StaysNormal) {
+    Document doc{"hello"};
+    TestLsp lsp_;
+    InputAdapter adapter(*lsp_.service, "file:///test.cpp");
+    EXPECT_EQ(send_keys(adapter, doc, "gr"), EditorMode::Normal);
+}
+
+TEST(InputAdapterIntegrationTest, SpaceF_StaysNormal) {
+    Document doc{"hello"};
+    TestLsp lsp_;
+    InputAdapter adapter(*lsp_.service, "file:///test.cpp");
+    EXPECT_EQ(send_keys(adapter, doc, " f"), EditorMode::Normal);
+}
+
+TEST(InputAdapterIntegrationTest, SpaceS_StaysNormal) {
+    Document doc{"hello"};
+    TestLsp lsp_;
+    InputAdapter adapter(*lsp_.service, "file:///test.cpp");
+    EXPECT_EQ(send_keys(adapter, doc, " s"), EditorMode::Normal);
+}
+
+TEST(InputAdapterIntegrationTest, SpaceCapitalS_StaysNormal) {
+    Document doc{"hello"};
+    TestLsp lsp_;
+    InputAdapter adapter(*lsp_.service, "file:///test.cpp");
+    EXPECT_EQ(send_keys(adapter, doc, " S"), EditorMode::Normal);
+}
+
+TEST(InputAdapterIntegrationTest, SpaceRN_StaysNormal) {
+    Document doc{"hello"};
+    TestLsp lsp_;
+    InputAdapter adapter(*lsp_.service, "file:///test.cpp");
+    EXPECT_EQ(send_keys(adapter, doc, " rn"), EditorMode::Normal);
+}
+
+TEST(InputAdapterIntegrationTest, K_StaysNormal) {
+    Document doc{"hello"};
+    TestLsp lsp_;
+    InputAdapter adapter(*lsp_.service, "file:///test.cpp");
+    EXPECT_EQ(send_keys(adapter, doc, "K"), EditorMode::Normal);
+}
+
+TEST(InputAdapterIntegrationTest, GG_MovesToTop) {
+    Document doc{"foo\nbar\nbaz"};
+    TestLsp lsp_;
+    InputAdapter adapter(*lsp_.service, "file:///test.cpp");
+    send_keys(adapter, doc, "jj");  // move down twice
+    EXPECT_EQ(doc.position().line, 2u);
+    send_keys(adapter, doc, "gg");
+    EXPECT_EQ(doc.position().line, 0u);
+}

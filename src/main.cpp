@@ -5,6 +5,7 @@
 #include <memory>
 
 #include "adapters/lsp/ClangdProcess.hpp"
+#include "core/entities/EditorConfig.hpp"
 #include "core/usecases/FileService.hpp"
 #include "core/usecases/LspService.hpp"
 #include "drivers/EditorApp.hpp"
@@ -29,7 +30,8 @@ int main(int argc, char* argv[]) {
     std::string uri = editor::core::usecases::FileService::path_to_uri(path);
 
     auto process = std::make_unique<editor::adapters::lsp::ClangdProcess>();
-    editor::core::usecases::LspService lsp(std::move(process));
+    editor::core::EditorConfig config;  // all features enabled by default
+    editor::core::usecases::LspService lsp(std::move(process), config);
     lsp.did_open(uri, doc.buffer().to_string());
 
     editor::drivers::EditorApp app(doc, lsp, uri);

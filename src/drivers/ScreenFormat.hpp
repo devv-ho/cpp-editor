@@ -4,7 +4,7 @@
 
 namespace editor::drivers::screen_fmt {
 
-// Mode tokens — must match FtxuiRenderer::render_statusbar() labels.
+// Mode tokens -- must match FtxuiRenderer::render_statusbar() labels.
 inline constexpr std::string_view kNormal = "NORMAL";
 inline constexpr std::string_view kInsert = "INSERT";
 
@@ -12,5 +12,11 @@ inline constexpr std::string_view kInsert = "INSERT";
 inline constexpr std::string_view kModeLeading = " ";    // before mode token
 inline constexpr std::string_view kModeTrailing = " ";   // after mode token
 inline constexpr std::string_view kUriSeparator = "  ";  // between mode block and uri
+
+// Diagnostic severity labels -- must match FtxuiRenderer::render_diagnostics().
+inline constexpr std::string_view kDiagError = "[E]";
+inline constexpr std::string_view kDiagWarning = "[W]";
+inline constexpr std::string_view kDiagHint = "[H]";
+inline constexpr std::string_view kDiagInfo = "[I]";
 
 }  // namespace editor::drivers::screen_fmt

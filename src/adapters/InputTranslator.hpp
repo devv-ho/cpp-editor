@@ -9,7 +9,26 @@
 namespace editor::adapters {
 
 // Maps a raw terminal event to a Command given the current editor mode.
-// Returns nullopt for Insert-mode typing (caller treats event as insert_char).
+// Multi-key sequences (g*, <Space>*) are resolved by InputDispatcher which
+// holds the pending_g_ / pending_space_ state between calls.
+//
+// Normal mode key map:
+//   h/j/k/l       -- motion
+//   gg            -- move_top   (g handled as pending_g; second g resolved in dispatcher)
+//   G             -- move_bottom
+//   0/$           -- move_sol / move_eol
+//   i/a           -- enter insert / insert-after
+//   gd            -- lsp_definition
+//   gD            -- lsp_declaration
+//   gI            -- lsp_implementation ('i' = enter_insert; uppercase avoids collision)
+//   gy            -- lsp_type_definition
+//   gr            -- lsp_references
+//   K             -- lsp_hover
+//   <Space>rn     -- lsp_rename      (pending_space -> 'r' -> 'n'; currently no-ops until prompt
+//   wired) <Space>cA     -- lsp_code_action (pending_space -> 'c' -> 'A'; uppercase avoids
+//   'a'=enter_insert_after) <Space>f      -- lsp_formatting <Space>s      -- lsp_document_symbol
+//   <Space>S      -- lsp_workspace_symbol
+//   ESC           -- quit (Normal) / enter_normal (Insert)
 [[nodiscard]] inline std::optional<core::Command> translate(const ftxui::Event& event,
                                                             core::EditorMode mode) {
     using core::EditorMode;
@@ -35,6 +54,21 @@ namespace editor::adapters {
         if (ch == "$") return core::Command::move_eol;
         if (ch == "i") return core::Command::enter_insert;
         if (ch == "a") return core::Command::enter_insert_after;
+        if (ch == "K") return core::Command::lsp_hover;
+        if (ch == " ") return core::Command::pending_space;
+        // Second keys of multi-key sequences (resolved by dispatcher state machine).
+        if (ch == "d") return core::Command::lsp_definition;   // gd
+        if (ch == "D") return core::Command::lsp_declaration;  // gD
+        if (ch == "I")
+            return core::Command::lsp_implementation;  // gI (uppercase; 'i' = enter_insert)
+        if (ch == "y") return core::Command::lsp_type_definition;   // gy
+        if (ch == "r") return core::Command::lsp_references;        // gr  / <Space>r(n)
+        if (ch == "n") return core::Command::lsp_rename;            // <Space>rn
+        if (ch == "c") return core::Command::lsp_code_action;       // <Space>c(A)
+        if (ch == "A") return core::Command::lsp_code_action;       // <Space>cA confirm key
+        if (ch == "f") return core::Command::lsp_formatting;        // <Space>f
+        if (ch == "s") return core::Command::lsp_document_symbol;   // <Space>s
+        if (ch == "S") return core::Command::lsp_workspace_symbol;  // <Space>S
         return std::nullopt;
     }
 

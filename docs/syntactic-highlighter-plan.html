@@ -1,0 +1,1331 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>feat: Syntactic Highlighting Layer — 구현 계획</title>
+<style>
+  :root {
+    --bg:         #0d1117;
+    --bg-card:    #161b22;
+    --bg-card2:   #1c2230;
+    --border:     #30363d;
+    --text:       #e6edf3;
+    --text-muted: #8b949e;
+    --blue:       #79c0ff;
+    --blue-light: #a5d6ff;
+    --cyan:       #39d0d8;
+    --green:      #56d364;
+    --yellow:     #e3b341;
+    --orange:     #f0883e;
+    --red:        #f85149;
+    --purple:     #d2a8ff;
+    --pink:       #f778ba;
+    --accent:     #1f6feb;
+    --accent-bg:  #0d2444;
+    --tag-bg:     #21262d;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans KR', Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    font-size: 14px;
+  }
+
+  .page { max-width: 1100px; margin: 0 auto; padding: 40px 24px 80px; }
+
+  .page-header {
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 24px;
+    margin-bottom: 40px;
+  }
+  .page-header h1 { font-size: 24px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
+  .meta-row { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 10px; }
+  .tag {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 2px 10px; border-radius: 20px; font-size: 12px; font-weight: 600;
+    background: var(--tag-bg); border: 1px solid var(--border); color: var(--text-muted);
+  }
+  .tag.feat   { border-color: var(--green); color: var(--green); }
+  .tag.active { border-color: var(--blue);  color: var(--blue);  }
+
+  h2 {
+    font-size: 18px; font-weight: 700; color: var(--text);
+    margin: 48px 0 16px; padding-bottom: 8px; border-bottom: 1px solid var(--border);
+  }
+  h3 {
+    font-size: 13px; font-weight: 700; color: var(--blue-light);
+    margin: 24px 0 10px; text-transform: uppercase; letter-spacing: .05em;
+  }
+
+  p  { margin-bottom: 12px; color: var(--text); }
+  ul { padding-left: 20px; margin-bottom: 12px; }
+  li { margin-bottom: 5px; }
+
+  code {
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    font-size: 12px; background: var(--tag-bg);
+    border: 1px solid var(--border); border-radius: 4px;
+    padding: 1px 5px; color: var(--orange);
+  }
+
+  .card-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;
+  }
+  @media (max-width: 700px) { .card-grid { grid-template-columns: 1fr; } }
+
+  /* Pipeline */
+  .pipe-box {
+    background: var(--bg-card2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 16px;
+    font-family: 'SF Mono', monospace; font-size: 12px; text-align: left;
+  }
+  .pipe-box.old  { border-color: var(--red);    color: var(--red); }
+  .pipe-box.new  { border-color: var(--green);  color: var(--green); }
+  .pipe-box.same { border-color: var(--border); color: var(--text-muted); }
+  .pipe-box.merge{ border-color: var(--yellow); color: var(--yellow); }
+  .pipe-label { font-size: 10px; color: var(--text-muted); margin-top: 4px; }
+
+  /* State machine */
+  .sm-diagram {
+    background: var(--bg-card2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 24px; margin: 20px 0; overflow-x: auto;
+  }
+  .sm-states {
+    display: flex; justify-content: space-around;
+    flex-wrap: wrap; gap: 12px; margin-bottom: 32px;
+  }
+  .sm-state {
+    border-radius: 50%; width: 96px; height: 96px;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'SF Mono', monospace; font-size: 11px; font-weight: 700;
+    text-align: center; border: 2px solid; flex-shrink: 0;
+  }
+  .sm-state.code { border-color: var(--blue);      color: var(--blue);      background: rgba(121,192,255,.08); }
+  .sm-state.lc   { border-color: var(--text-muted); color: var(--text-muted); background: rgba(139,148,158,.08); }
+  .sm-state.bc   { border-color: var(--text-muted); color: var(--text-muted); background: rgba(139,148,158,.08); }
+  .sm-state.str  { border-color: var(--green);     color: var(--green);     background: rgba(86,211,100,.08); }
+  .sm-state.chr  { border-color: var(--green);     color: var(--green);     background: rgba(86,211,100,.08); }
+  .sm-state.pre  { border-color: var(--cyan);      color: var(--cyan);      background: rgba(57,208,216,.08); }
+
+  .sm-transitions { display: flex; flex-direction: column; gap: 4px; }
+  .sm-row {
+    display: grid; grid-template-columns: 110px 1fr 1fr;
+    gap: 12px; padding: 6px 10px; border-radius: 4px;
+    font-family: 'SF Mono', monospace; font-size: 12px; align-items: baseline;
+  }
+  .sm-row:nth-child(odd) { background: rgba(255,255,255,.02); }
+  .sm-state-label { color: var(--blue); font-weight: 700; }
+  .sm-trigger     { color: var(--green); }
+  .sm-action      { color: var(--text-muted); }
+  .sm-section-head {
+    grid-column: 1 / -1; color: var(--yellow); font-weight: 700;
+    font-size: 11px; text-transform: uppercase; letter-spacing: .08em;
+    padding-top: 8px; border-top: 1px solid var(--border); margin-top: 4px;
+  }
+
+  /* Merge diagram */
+  .merge-diagram {
+    background: var(--bg-card2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 24px; margin: 20px 0; overflow-x: auto;
+  }
+  .span-row { display: flex; align-items: center; margin-bottom: 16px; gap: 12px; }
+  .span-label {
+    width: 90px; font-size: 11px; color: var(--text-muted);
+    font-family: 'SF Mono', monospace; flex-shrink: 0;
+  }
+  .span-track {
+    flex: 1; height: 28px; background: rgba(255,255,255,.03);
+    border-radius: 4px; position: relative;
+    border: 1px solid var(--border); min-width: 400px;
+  }
+  .span-block {
+    position: absolute; height: 100%; border-radius: 3px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px; font-family: 'SF Mono', monospace; font-weight: 700;
+    border: 1px solid; white-space: nowrap; overflow: hidden;
+  }
+  .span-block.syn { background: rgba(86,211,100,.15); border-color: var(--green); color: var(--green); }
+  .span-block.lsp { background: rgba(121,192,255,.15); border-color: var(--blue); color: var(--blue); }
+  .span-block.out { background: rgba(86,211,100,.1);  border-color: var(--green); color: var(--green); }
+  .merge-arrow { text-align: center; color: var(--text-muted); margin: 4px 0; font-size: 18px; }
+  .merge-legend {
+    display: flex; gap: 20px; flex-wrap: wrap; margin-top: 16px;
+    padding-top: 16px; border-top: 1px solid var(--border);
+  }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-muted); }
+  .legend-dot  { width: 12px; height: 12px; border-radius: 2px; border: 1px solid; flex-shrink: 0; }
+
+  /* Color palette */
+  .color-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+    gap: 10px; margin: 16px 0;
+  }
+  .color-chip {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 14px; background: var(--bg-card2);
+    border: 1px solid var(--border); border-radius: 6px;
+  }
+  .color-dot  { width: 16px; height: 16px; border-radius: 50%; flex-shrink: 0; }
+  .color-info { display: flex; flex-direction: column; gap: 2px; }
+  .color-type { font-size: 12px; font-family: 'SF Mono', monospace; color: var(--text); }
+  .color-name { font-size: 11px; color: var(--text-muted); }
+
+  /* Requirements */
+  .req-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 16px 0;
+  }
+  @media (max-width: 640px) { .req-grid { grid-template-columns: 1fr; } }
+  .req-item {
+    display: flex; gap: 10px; padding: 10px 14px;
+    background: var(--bg-card2); border: 1px solid var(--border);
+    border-radius: 6px; font-size: 13px;
+  }
+  .req-id {
+    font-family: 'SF Mono', monospace; font-size: 11px; font-weight: 700;
+    color: var(--accent); flex-shrink: 0; padding-top: 2px;
+  }
+
+  /* Implementation units */
+  .unit {
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 8px; margin-bottom: 20px; overflow: hidden;
+  }
+  .unit-header {
+    display: flex; align-items: center; gap: 12px; padding: 14px 20px;
+    background: var(--bg-card2); border-bottom: 1px solid var(--border);
+  }
+  .unit-id {
+    font-family: 'SF Mono', monospace; font-size: 13px; font-weight: 700;
+    color: var(--accent); background: var(--accent-bg);
+    border: 1px solid var(--accent); border-radius: 4px;
+    padding: 2px 8px; flex-shrink: 0;
+  }
+  .unit-title { font-size: 15px; font-weight: 700; color: var(--text); }
+  .unit-body  { padding: 16px 20px; }
+  .unit-field { margin-bottom: 14px; }
+  .unit-field-label {
+    font-size: 11px; font-weight: 700; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: .06em; margin-bottom: 5px;
+  }
+  .file-list { display: flex; flex-direction: column; gap: 4px; }
+  .file-item {
+    display: flex; align-items: center; gap: 8px;
+    font-family: 'SF Mono', monospace; font-size: 12px;
+    padding: 4px 8px; border-radius: 4px;
+    background: var(--tag-bg); border: 1px solid var(--border);
+  }
+  .file-badge {
+    font-size: 10px; font-weight: 700; padding: 1px 5px;
+    border-radius: 3px; flex-shrink: 0;
+  }
+  .file-badge.create { background: rgba(86,211,100,.2);  color: var(--green);  }
+  .file-badge.modify { background: rgba(240,136,62,.2);  color: var(--orange); }
+  .file-badge.test   { background: rgba(210,168,255,.2); color: var(--purple); }
+
+  .dep-badges  { display: flex; gap: 6px; flex-wrap: wrap; }
+  .dep-badge {
+    font-family: 'SF Mono', monospace; font-size: 11px; font-weight: 700;
+    padding: 2px 8px; border-radius: 4px;
+    background: var(--accent-bg); border: 1px solid var(--accent); color: var(--blue);
+  }
+  .dep-badge.none { background: var(--tag-bg); border-color: var(--border); color: var(--text-muted); }
+
+  .req-badges { display: flex; gap: 6px; flex-wrap: wrap; }
+  .req-badge {
+    font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 4px;
+    background: rgba(31,111,235,.15); border: 1px solid rgba(31,111,235,.4);
+    color: var(--blue-light); font-family: 'SF Mono', monospace;
+  }
+
+  .scenario-list { display: flex; flex-direction: column; gap: 6px; }
+  .scenario {
+    padding: 8px 12px; border-radius: 4px; font-size: 12px;
+    border-left: 3px solid; background: rgba(255,255,255,.02);
+    font-family: 'SF Mono', monospace;
+  }
+  .scenario.happy { border-color: var(--green);  }
+  .scenario.edge  { border-color: var(--yellow); }
+  .scenario.error { border-color: var(--red);    }
+  .scenario.merge { border-color: var(--blue);   }
+  .scenario .s-cat {
+    font-size: 10px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .05em; margin-bottom: 2px;
+  }
+  .scenario.happy .s-cat { color: var(--green);  }
+  .scenario.edge  .s-cat { color: var(--yellow); }
+  .scenario.error .s-cat { color: var(--red);    }
+  .scenario.merge .s-cat { color: var(--blue);   }
+  .scenario .s-text { color: var(--text); line-height: 1.5; }
+
+  /* Risks table */
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13px; }
+  th {
+    text-align: left; padding: 8px 14px; background: var(--bg-card2);
+    border: 1px solid var(--border); color: var(--text-muted);
+    font-size: 11px; text-transform: uppercase; letter-spacing: .05em;
+  }
+  td { padding: 10px 14px; border: 1px solid var(--border); vertical-align: top; line-height: 1.6; }
+  tr:nth-child(odd) td { background: rgba(255,255,255,.015); }
+
+  /* Structural change */
+  .struct-diagram {
+    background: var(--bg-card2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 28px; margin: 20px 0; overflow-x: auto;
+  }
+  .struct-cols {
+    display: grid; grid-template-columns: 1fr 60px 1fr; gap: 0; align-items: start;
+  }
+  .struct-col-label {
+    font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .07em; margin-bottom: 16px; text-align: center;
+    color: var(--text-muted);
+  }
+  .struct-arrow-col {
+    display: flex; align-items: center; justify-content: center;
+    padding-top: 60px; font-size: 24px; color: var(--text-muted);
+  }
+  .file-tree { display: flex; flex-direction: column; gap: 4px; font-family: 'SF Mono', monospace; font-size: 12px; }
+  .ft-dir      { color: var(--blue-light); font-weight: 700; }
+  .ft-file     { color: var(--text-muted); padding-left: 16px; }
+  .ft-file.new      { color: var(--green);  }
+  .ft-file.modified { color: var(--orange); }
+  .ft-file.test     { color: var(--purple); }
+  .ft-indent { padding-left: 16px; }
+
+  .change-legend {
+    display: flex; gap: 20px; flex-wrap: wrap; margin-top: 20px;
+    padding-top: 16px; border-top: 1px solid var(--border); font-size: 12px;
+  }
+  .cl-item { display: flex; align-items: center; gap: 6px; color: var(--text-muted); }
+  .cl-dot  { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .cl-dot.new  { background: var(--green);  }
+  .cl-dot.mod  { background: var(--orange); }
+  .cl-dot.test { background: var(--purple); }
+
+  /* Scope */
+  .scope-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0; }
+  @media (max-width: 640px) { .scope-grid { grid-template-columns: 1fr; } }
+  .scope-card { padding: 16px; border-radius: 8px; border: 1px solid; }
+  .scope-card.in  { border-color: rgba(86,211,100,.4);  background: rgba(86,211,100,.05); }
+  .scope-card.out { border-color: rgba(248,81,73,.4);   background: rgba(248,81,73,.05);  }
+  .scope-card-title {
+    font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .06em; margin-bottom: 10px;
+  }
+  .scope-card.in  .scope-card-title { color: var(--green); }
+  .scope-card.out .scope-card-title { color: var(--red);   }
+  .scope-card li { font-size: 13px; margin-bottom: 5px; }
+
+  /* Decision */
+  .decision {
+    padding: 14px 16px; border-radius: 6px;
+    border-left: 3px solid var(--yellow); background: rgba(227,179,65,.06);
+    margin-bottom: 10px; font-size: 13px; line-height: 1.7;
+  }
+  .decision strong { color: var(--yellow); }
+
+  /* Impact */
+  .impact-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 16px 0; }
+  @media (max-width: 640px) { .impact-grid { grid-template-columns: 1fr; } }
+  .impact-item {
+    padding: 12px 16px; border-radius: 6px;
+    background: var(--bg-card2); border: 1px solid var(--border); font-size: 13px;
+  }
+  .impact-title {
+    font-size: 11px; font-weight: 700; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: .05em; margin-bottom: 5px;
+  }
+
+  hr { border: none; border-top: 1px solid var(--border); margin: 40px 0; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- ══ HEADER ══ -->
+  <div class="page-header">
+    <h1>feat: Regex 기반 Syntactic Highlighting 레이어 추가</h1>
+    <div class="meta-row">
+      <span class="tag feat">feat</span>
+      <span class="tag active">active</span>
+      <span class="tag">2026-05-17</span>
+      <span class="tag">branch: feat/lsp-e2e-tests</span>
+      <span class="tag">PR #15</span>
+    </div>
+  </div>
+
+  <!-- ══ OVERVIEW ══ -->
+  <h2 id="overview">개요</h2>
+  <p>
+    clangd의 semantic tokens는 일반적인 C++ 파일에서 약 86개의 토큰만 커버합니다 — 함수, 타입, 변수, 매크로, 연산자처럼
+    <em>의미론적(semantic) 정보</em>가 있는 식별자들만 해당됩니다.
+    <code>int</code>, <code>const</code>, <code>return</code> 같은 C++ keyword,
+    <code>#include</code> 같은 전처리기 지시문, 주석, 문자열 리터럴은 <em>전혀 내려주지 않습니다.</em>
+    결과적으로 파일의 상당 부분이 default 색상으로 표출됩니다.
+  </p>
+  <p>
+    이 계획은 <strong>state machine 기반 syntactic highlighting 레이어</strong>를 먼저 실행해
+    모든 공백을 채우고, LSP semantic 레이어가 겹치는 구간을 덮어쓰는 2단계 파이프라인을 도입합니다.
+    외부 의존성 없이 VS Code 수준의 highlighting 품질을 달성합니다.
+  </p>
+
+  <!-- ══ STRUCTURAL CHANGE ══ -->
+  <h2 id="structural">구조적 변경</h2>
+
+  <h3>Pipeline: Before vs After</h3>
+  <div class="struct-diagram">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:40px;">
+      <div>
+        <div class="struct-col-label" style="color:var(--red)">변경 전</div>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          <div class="pipe-box old">
+            lsp_.semantic_tokens()
+            <div class="pipe-label">파일당 ~86개 토큰만</div>
+          </div>
+          <div style="text-align:center;color:var(--text-muted);font-size:20px;">↓</div>
+          <div class="pipe-box same">
+            token_map[line] → SpanList
+            <div class="pipe-label">LSP span만 존재</div>
+          </div>
+          <div style="text-align:center;color:var(--text-muted);font-size:20px;">↓</div>
+          <div class="pipe-box same">
+            colorize_line(text, spans, cursor)
+            <div class="pipe-label">공백 → Default 색상</div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="struct-col-label" style="color:var(--green)">변경 후</div>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+            <div class="pipe-box new">
+              highlight_file(source)
+              <div class="pipe-label">state machine — 파일 전체</div>
+            </div>
+            <div class="pipe-box old">
+              lsp_.semantic_tokens()
+              <div class="pipe-label">~86개 semantic token</div>
+            </div>
+          </div>
+          <div style="text-align:center;color:var(--text-muted);font-size:20px;">↓</div>
+          <div class="pipe-box merge">
+            merge_spans(regex_map, lsp_map)
+            <div class="pipe-label">LSP가 겹치는 구간 우선 · O(n)</div>
+          </div>
+          <div style="text-align:center;color:var(--text-muted);font-size:20px;">↓</div>
+          <div class="pipe-box same">
+            colorize_line(text, spans, cursor)
+            <div class="pipe-label">변경 없음 · 모든 공백 채워짐</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h3>파일 구조 변경</h3>
+  <div class="struct-diagram">
+    <div class="struct-cols">
+      <div>
+        <div class="struct-col-label">변경 전</div>
+        <div class="file-tree">
+          <span class="ft-dir">src/drivers/</span>
+          <div class="ft-indent">
+            <span class="ft-file">EditorApp.cpp</span><br>
+            <span class="ft-file">EditorApp.hpp</span><br>
+            <span class="ft-file modified">FtxuiRenderer.cpp</span><br>
+            <span class="ft-file">FtxuiRenderer.hpp</span><br>
+            <span class="ft-file">ScreenFormat.hpp</span>
+          </div>
+          <br>
+          <span class="ft-dir">tests/unit/</span>
+          <div class="ft-indent">
+            <span class="ft-file">test_Buffer.cpp</span><br>
+            <span class="ft-file">test_Cursor.cpp</span><br>
+            <span class="ft-file">test_LspJsonRpc.cpp</span><br>
+            <span class="ft-file">…</span>
+          </div>
+        </div>
+      </div>
+      <div class="struct-arrow-col">→</div>
+      <div>
+        <div class="struct-col-label">변경 후</div>
+        <div class="file-tree">
+          <span class="ft-dir">src/drivers/</span>
+          <div class="ft-indent">
+            <span class="ft-file">EditorApp.cpp</span><br>
+            <span class="ft-file">EditorApp.hpp</span><br>
+            <span class="ft-file modified">FtxuiRenderer.cpp &nbsp;<span style="font-size:10px;color:var(--orange)">수정</span></span><br>
+            <span class="ft-file">FtxuiRenderer.hpp</span><br>
+            <span class="ft-file">ScreenFormat.hpp</span><br>
+            <span class="ft-file new">SyntaxHighlighter.hpp &nbsp;<span style="font-size:10px;color:var(--green)">신규</span></span>
+          </div>
+          <br>
+          <span class="ft-dir">tests/unit/</span>
+          <div class="ft-indent">
+            <span class="ft-file">test_Buffer.cpp</span><br>
+            <span class="ft-file">test_Cursor.cpp</span><br>
+            <span class="ft-file">test_LspJsonRpc.cpp</span><br>
+            <span class="ft-file test">test_SyntaxHighlighter.cpp &nbsp;<span style="font-size:10px;color:var(--purple)">신규</span></span><br>
+            <span class="ft-file">…</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="change-legend">
+      <div class="cl-item"><div class="cl-dot new"></div>신규 파일</div>
+      <div class="cl-item"><div class="cl-dot mod"></div>수정</div>
+      <div class="cl-item"><div class="cl-dot test"></div>신규 테스트</div>
+    </div>
+  </div>
+
+  <h3>색상 매핑</h3>
+  <div class="color-grid">
+    <div class="color-chip">
+      <div class="color-dot" style="background:#79c0ff"></div>
+      <div class="color-info">
+        <span class="color-type">"keyword"</span>
+        <span class="color-name">Blue — int, const, return…</span>
+      </div>
+    </div>
+    <div class="color-chip">
+      <div class="color-dot" style="background:#a5d6ff"></div>
+      <div class="color-info">
+        <span class="color-type">"preprocessor"</span>
+        <span class="color-name">BlueLight — #include, #define…</span>
+      </div>
+    </div>
+    <div class="color-chip">
+      <div class="color-dot" style="background:#56d364"></div>
+      <div class="color-info">
+        <span class="color-type">"string" (include 경로)</span>
+        <span class="color-name">Green — &lt;header&gt;, "path"</span>
+      </div>
+    </div>
+    <div class="color-chip">
+      <div class="color-dot" style="background:#56d364"></div>
+      <div class="color-info">
+        <span class="color-type">"string"</span>
+        <span class="color-name">Green — 문자열·문자 리터럴</span>
+      </div>
+    </div>
+    <div class="color-chip">
+      <div class="color-dot" style="background:#8b949e"></div>
+      <div class="color-info">
+        <span class="color-type">"comment"</span>
+        <span class="color-name">GrayLight — // 및 /* */</span>
+      </div>
+    </div>
+    <div class="color-chip">
+      <div class="color-dot" style="background:#f778ba"></div>
+      <div class="color-info">
+        <span class="color-type">"number"</span>
+        <span class="color-name">Magenta — 42, 0xFF, 3.14f…</span>
+      </div>
+    </div>
+    <div class="color-chip">
+      <div class="color-dot" style="background:#39d0d8"></div>
+      <div class="color-info">
+        <span class="color-type">"syn_operator"</span>
+        <span class="color-name">Cyan — +, -, &lt;&lt;, ::, -&gt;…</span>
+      </div>
+    </div>
+    <div class="color-chip">
+      <div class="color-dot" style="background:#e6edf3"></div>
+      <div class="color-info">
+        <span class="color-type">"bracket"</span>
+        <span class="color-name">White — ( ) { } [ ]</span>
+      </div>
+    </div>
+  </div>
+  <p style="font-size:12px;color:var(--text-muted)">
+    LSP <code>"operator"</code> → Yellow (기존 유지). Syntactic 연산자는 <code>"syn_operator"</code> → Cyan을 사용해 충돌을 방지하며, LSP가 매칭하는 구간은 LSP가 덮어씁니다.
+  </p>
+
+  <hr>
+
+  <!-- ══ STATE MACHINE ══ -->
+  <h2 id="statemachine">State Machine 설계</h2>
+  <p>
+    파일 전체를 <strong>왼쪽에서 오른쪽으로 한 번만</strong> 스캔합니다.
+    6개 상태를 가지며, 현재 상태에 따라 같은 문자열을 다르게 해석합니다.
+    이 방식이 <code>"// not a comment"</code>, <code>/* "not a string" */</code> 같은
+    케이스를 정확하게 처리하는 핵심입니다.
+  </p>
+
+  <div class="sm-diagram">
+    <div class="sm-states">
+      <div>
+        <div class="sm-state code">CODE</div>
+        <div style="text-align:center;font-size:10px;color:var(--text-muted);margin-top:6px">초기 상태</div>
+      </div>
+      <div>
+        <div class="sm-state lc">LINE<br>COMMENT</div>
+        <div style="text-align:center;font-size:10px;color:var(--text-muted);margin-top:6px">// …</div>
+      </div>
+      <div>
+        <div class="sm-state bc">BLOCK<br>COMMENT</div>
+        <div style="text-align:center;font-size:10px;color:var(--text-muted);margin-top:6px">/* … */</div>
+      </div>
+      <div>
+        <div class="sm-state str">STRING</div>
+        <div style="text-align:center;font-size:10px;color:var(--text-muted);margin-top:6px">"…"</div>
+      </div>
+      <div>
+        <div class="sm-state chr">CHAR</div>
+        <div style="text-align:center;font-size:10px;color:var(--text-muted);margin-top:6px">'…'</div>
+      </div>
+      <div>
+        <div class="sm-state pre">PREPROC</div>
+        <div style="text-align:center;font-size:10px;color:var(--text-muted);margin-top:6px">#…</div>
+      </div>
+    </div>
+
+    <div class="sm-transitions">
+      <div class="sm-row">
+        <span class="sm-section-head">CODE 전환 — 왼쪽에서 오른쪽으로, 첫 번째 매칭 우선</span>
+      </div>
+      <div class="sm-row">
+        <span class="sm-state-label">CODE</span>
+        <span class="sm-trigger">"//"</span>
+        <span class="sm-action">→ LINE_COMMENT 진입, 시작 위치 기록</span>
+      </div>
+      <div class="sm-row">
+        <span class="sm-state-label">CODE</span>
+        <span class="sm-trigger">"/*"</span>
+        <span class="sm-action">→ BLOCK_COMMENT 진입, 시작 위치 기록</span>
+      </div>
+      <div class="sm-row">
+        <span class="sm-state-label">CODE</span>
+        <span class="sm-trigger">'"'</span>
+        <span class="sm-action">→ STRING 진입, 시작 위치 기록</span>
+      </div>
+      <div class="sm-row">
+        <span class="sm-state-label">CODE</span>
+        <span class="sm-trigger">"'"</span>
+        <span class="sm-action">→ CHAR 진입, 시작 위치 기록</span>
+      </div>
+      <div class="sm-row">
+        <span class="sm-state-label">CODE</span>
+        <span class="sm-trigger">'#' (col 0)</span>
+        <span class="sm-action">→ PREPROCESSOR 진입 (앞에 공백만 있어도 허용)</span>
+      </div>
+      <div class="sm-row">
+        <span class="sm-state-label">CODE</span>
+        <span class="sm-trigger">글자 / '_'</span>
+        <span class="sm-action">→ 식별자 전체 읽기 · C++23 keyword면 "keyword" span 생성</span>
+      </div>
+      <div class="sm-row">
+        <span class="sm-state-label">CODE</span>
+        <span class="sm-trigger">숫자 / '.숫자'</span>
+        <span class="sm-action">→ 숫자 리터럴 끝까지 읽기 → "number" span 생성</span>
+      </div>
+      <div class="sm-row">
+        <span class="sm-state-label">CODE</span>
+        <span class="sm-trigger">연산자 문자</span>
+        <span class="sm-action">→ longest-match ('&gt;&gt;=' → '&gt;&gt;' → '&gt;' 순) → "syn_operator" span</span>
+      </div>
+      <div class="sm-row">
+        <span class="sm-state-label">CODE</span>
+        <span class="sm-trigger">bracket 문자</span>
+        <span class="sm-action">→ "bracket" span (단일 문자)</span>
+      </div>
+
+      <div class="sm-row">
+        <span class="sm-section-head">LINE_COMMENT 전환</span>
+      </div>
+      <div class="sm-row">
+        <span class="sm-state-label">LINE_CMT</span>
+        <span class="sm-trigger">'\n'</span>
+        <span class="sm-action">→ "comment" span [start, EOL) 생성 · CODE로 복귀 (keyword·연산자 무시됨)</span>
+      </div>
+
+      <div class="sm-row">
+        <span class="sm-section-head">BLOCK_COMMENT 전환 — 여러 줄에 걸침</span>
+      </div>
+      <div class="sm-row">
+        <span class="sm-state-label">BLOCK_CMT</span>
+        <span class="sm-trigger">"*/"</span>
+        <span class="sm-action">→ "comment" span [start, pos+2) 생성 · CODE 복귀</span>
+      </div>
+      <div class="sm-row">
+        <span class="sm-state-label">BLOCK_CMT</span>
+        <span class="sm-trigger">'\n'</span>
+        <span class="sm-action">→ "comment" span [start, EOL) 생성 · 다음 줄도 BLOCK_CMT에서 시작</span>
+      </div>
+      <div class="sm-row">
+        <span class="sm-state-label">BLOCK_CMT</span>
+        <span class="sm-trigger">EOF</span>
+        <span class="sm-action">→ 남은 전체를 "comment"로 처리</span>
+      </div>
+
+      <div class="sm-row">
+        <span class="sm-section-head">STRING / CHAR 전환</span>
+      </div>
+      <div class="sm-row">
+        <span class="sm-state-label">STRING</span>
+        <span class="sm-trigger">'\\'</span>
+        <span class="sm-action">→ 다음 문자 skip (escape sequence)</span>
+      </div>
+      <div class="sm-row">
+        <span class="sm-state-label">STRING</span>
+        <span class="sm-trigger">'"'</span>
+        <span class="sm-action">→ "string" span [start, pos+1) 생성 · CODE 복귀</span>
+      </div>
+      <div class="sm-row">
+        <span class="sm-state-label">STRING</span>
+        <span class="sm-trigger">'\n'</span>
+        <span class="sm-action">→ "string" span [start, EOL) 생성 (미종료) · CODE 복귀 (다음 줄은 정상)</span>
+      </div>
+      <div class="sm-row">
+        <span class="sm-state-label">CHAR</span>
+        <span class="sm-trigger">'\\'</span>
+        <span class="sm-action">→ 다음 문자 skip</span>
+      </div>
+      <div class="sm-row">
+        <span class="sm-state-label">CHAR</span>
+        <span class="sm-trigger">"'"</span>
+        <span class="sm-action">→ "string" span [start, pos+1) 생성 · CODE 복귀</span>
+      </div>
+      <div class="sm-row">
+        <span class="sm-state-label">CHAR</span>
+        <span class="sm-trigger">'\n'</span>
+        <span class="sm-action">→ "string" span [start, EOL) 생성 (미종료) · CODE 복귀</span>
+      </div>
+
+      <div class="sm-row">
+        <span class="sm-section-head">PREPROCESSOR 전환</span>
+      </div>
+      <div class="sm-row">
+        <span class="sm-state-label">PREPROC</span>
+        <span class="sm-trigger">'include' + 공백</span>
+        <span class="sm-action">→ directive를 "preprocessor" span으로 · &lt;…&gt; 또는 "…" 스캔 후 "string" span</span>
+      </div>
+      <div class="sm-row">
+        <span class="sm-state-label">PREPROC</span>
+        <span class="sm-trigger">그 외 + '\n'</span>
+        <span class="sm-action">→ "preprocessor" span [start, EOL) 생성 · CODE 복귀</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ MERGE ══ -->
+  <h2 id="merge">Merge 알고리즘 (LSP 우선)</h2>
+  <p>
+    두 맵이 모두 만들어진 뒤, 라인 단위로 merge를 실행합니다.
+    LSP span이 항상 우선이며, 겹치는 syntactic span은 trim하거나 제거합니다.
+  </p>
+
+  <div class="merge-diagram">
+    <div style="font-size:11px;color:var(--text-muted);margin-bottom:16px;font-family:monospace">
+      예시 라인: &nbsp;<span style="color:var(--text)">std::string path = argv[1];</span>
+    </div>
+
+    <div class="span-row">
+      <div class="span-label" style="color:transparent">ruler</div>
+      <div class="span-track" style="height:16px;background:none;border:none;min-width:400px;position:relative;">
+        <div style="position:absolute;left:0;right:0;display:flex;justify-content:space-between;font-size:10px;color:var(--text-muted);font-family:monospace">
+          <span>0</span><span>5</span><span>10</span><span>15</span><span>20</span><span>25</span><span>30</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="span-row">
+      <div class="span-label">syntactic</div>
+      <div class="span-track">
+        <div class="span-block syn" style="left:0%;width:10%;font-size:9px">:: op</div>
+        <div class="span-block syn" style="left:11%;width:20%;font-size:9px">keyword: string</div>
+        <div class="span-block syn" style="left:38%;width:5%;font-size:9px">= op</div>
+        <div class="span-block syn" style="left:55%;width:8%;font-size:9px">[] bracket</div>
+        <div class="span-block syn" style="left:75%;width:6%;font-size:9px">1 num</div>
+      </div>
+    </div>
+    <div class="span-row">
+      <div class="span-label">LSP</div>
+      <div class="span-track">
+        <div class="span-block lsp" style="left:11%;width:20%;font-size:9px">LSP: class</div>
+        <div class="span-block lsp" style="left:33%;width:8%;font-size:9px">LSP: var</div>
+        <div class="span-block lsp" style="left:55%;width:13%;font-size:9px">LSP: var argv</div>
+      </div>
+    </div>
+    <div class="merge-arrow">↓ merge (LSP 우선 적용)</div>
+    <div class="span-row">
+      <div class="span-label">merged</div>
+      <div class="span-track">
+        <div class="span-block out" style="left:0%;width:10%;font-size:9px">:: op</div>
+        <div class="span-block lsp" style="left:11%;width:20%;font-size:9px">LSP: class</div>
+        <div class="span-block lsp" style="left:33%;width:8%;font-size:9px">LSP: var</div>
+        <div class="span-block out" style="left:38%;width:5%;font-size:8px">= op</div>
+        <div class="span-block lsp" style="left:55%;width:13%;font-size:9px">LSP: var argv</div>
+        <div class="span-block out" style="left:75%;width:6%;font-size:9px">1 num</div>
+      </div>
+    </div>
+    <div class="merge-legend">
+      <div class="legend-item">
+        <div class="legend-dot" style="background:rgba(86,211,100,.3);border-color:var(--green)"></div>
+        Syntactic span (LSP 겹침 없으면 그대로 유지)
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot" style="background:rgba(121,192,255,.3);border-color:var(--blue)"></div>
+        LSP span (항상 우선)
+      </div>
+    </div>
+
+    <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;font-weight:700">처리되는 겹침 케이스 4가지</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px;font-family:monospace">
+        <div style="padding:8px;background:rgba(255,255,255,.02);border-radius:4px;border:1px solid var(--border)">
+          <span style="color:var(--yellow)">완전 일치:</span><br>
+          <span style="color:var(--text-muted)">LSP [5,8) ⊇ syn [5,8)</span><br>
+          → syn 제거
+        </div>
+        <div style="padding:8px;background:rgba(255,255,255,.02);border-radius:4px;border:1px solid var(--border)">
+          <span style="color:var(--yellow)">왼쪽 부분 겹침:</span><br>
+          <span style="color:var(--text-muted)">LSP [5,8) ∩ syn [3,7)</span><br>
+          → syn을 [3,5)로 trim
+        </div>
+        <div style="padding:8px;background:rgba(255,255,255,.02);border-radius:4px;border:1px solid var(--border)">
+          <span style="color:var(--yellow)">오른쪽 부분 겹침:</span><br>
+          <span style="color:var(--text-muted)">LSP [5,8) ∩ syn [6,10)</span><br>
+          → syn을 [8,10)으로 trim
+        </div>
+        <div style="padding:8px;background:rgba(255,255,255,.02);border-radius:4px;border:1px solid var(--border)">
+          <span style="color:var(--yellow)">완전 포함:</span><br>
+          <span style="color:var(--text-muted)">LSP [5,8) ⊇ syn [6,7)</span><br>
+          → syn 완전 제거
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <hr>
+
+  <!-- ══ REQUIREMENTS ══ -->
+  <h2 id="requirements">요구사항</h2>
+  <div class="req-grid">
+    <div class="req-item"><span class="req-id">R1</span>모든 C++ keyword는 구별되는 색상 (Default 절대 불가)</div>
+    <div class="req-item"><span class="req-id">R2</span>전처리기 지시문 그룹 색상 부여; include 경로는 문자열 색상</div>
+    <div class="req-item"><span class="req-id">R3</span>라인·블록 주석 전체 정확히 색상 부여 — 내부의 keyword·연산자 무시</div>
+    <div class="req-item"><span class="req-id">R4</span>문자열·문자 리터럴 정확히 처리; escape sequence가 span을 끊지 않음</div>
+    <div class="req-item"><span class="req-id">R5</span>숫자 리터럴 (정수, float, hex, binary, suffix 변형) 색상 부여</div>
+    <div class="req-item"><span class="req-id">R6</span>모든 연산자 색상 부여; compound 연산자는 longest-match (<code>&gt;&gt;=</code> 우선)</div>
+    <div class="req-item"><span class="req-id">R7</span>Bracket <code>( ) { } [ ]</code> 색상 부여</div>
+    <div class="req-item"><span class="req-id">R8</span>LSP semantic span이 존재하면 겹치는 syntactic span을 덮어씀 (LSP 우선)</div>
+    <div class="req-item"><span class="req-id">R9</span>주석·문자열 내부의 내용은 keyword/연산자 등으로 재해석하지 않음</div>
+    <div class="req-item"><span class="req-id">R10</span><code>colorize_line</code>의 cursor 주입 로직은 변경하지 않음</div>
+    <div class="req-item"><span class="req-id">R11</span>모든 token 카테고리 및 핵심 edge case에 대한 unit test 작성</div>
+  </div>
+
+  <!-- ══ SCOPE ══ -->
+  <h2 id="scope">범위</h2>
+  <div class="scope-grid">
+    <div class="scope-card in">
+      <div class="scope-card-title">포함</div>
+      <ul>
+        <li>C++23 표준 keyword 전체</li>
+        <li>전처리기 지시문 + include 경로</li>
+        <li>라인 주석 (<code>//</code>) 및 블록 주석 (<code>/* */</code>)</li>
+        <li>문자열·문자 리터럴</li>
+        <li>숫자 리터럴 (정수, float, hex, binary, suffix)</li>
+        <li>연산자 (단일·복합, longest-match)</li>
+        <li>Bracket</li>
+        <li>LSP wins on overlap (merge 알고리즘)</li>
+        <li>모든 카테고리 + edge case unit test</li>
+      </ul>
+    </div>
+    <div class="scope-card out">
+      <div class="scope-card-title">제외 (v1)</div>
+      <ul>
+        <li>Raw string literals <code>R"(…)"</code></li>
+        <li>줄 끝 <code>\</code> 이어쓰기 문자열</li>
+        <li>언어 감지 (C++만 지원)</li>
+        <li>overloaded 연산자의 의미론적 처리</li>
+        <li>증분(incremental) 재파싱</li>
+        <li>외부 의존성 추가</li>
+      </ul>
+    </div>
+  </div>
+
+  <hr>
+
+  <!-- ══ KEY DECISIONS ══ -->
+  <h2 id="decisions">핵심 기술 결정</h2>
+
+  <div class="decision">
+    <strong>Regex-per-category 대신 State machine</strong><br>
+    카테고리별 regex를 독립적으로 적용하면 <code>"// not a comment"</code>,
+    <code>/* "not a string" */</code> 같은 케이스를 올바르게 처리할 수 없습니다.
+    단일 왼→오 패스의 state machine은 lookahead·backtracking 없이 이를 정확히 해결합니다.
+  </div>
+  <div class="decision">
+    <strong>파일 전체 스캔, 라인 단위 출력</strong><br>
+    여러 줄에 걸친 블록 주석을 처리하려면 state가 줄을 넘어 유지되어야 합니다.
+    파일 전체를 한 번 스캔하고, 출력은 기존 <code>token_map</code>과 동일한 per-line SpanList map으로 만듭니다.
+  </div>
+  <div class="decision">
+    <strong>LSP wins on overlap</strong><br>
+    LSP는 의미론적으로 더 정확한 정보를 가집니다 (예: <code>string</code>이 타입인지 keyword인지).
+    겹치는 구간에서는 LSP span이 항상 우선합니다.
+  </div>
+  <div class="decision">
+    <strong>"syn_operator" 별도 타입 문자열</strong><br>
+    LSP는 <code>"operator"</code> → Yellow를 내려줍니다. Syntactic 레이어는 <code>"syn_operator"</code> → Cyan을
+    사용해 충돌을 방지하며, LSP가 매칭하는 구간은 LSP가 덮어씁니다.
+  </div>
+  <div class="decision">
+    <strong>Header-only SyntaxHighlighter.hpp (src/drivers/)</strong><br>
+    FTXUI include 없이 순수 로직만 포함해 unit test에서 독립적으로 사용 가능합니다.
+    새로운 CMake 타겟·의존성 없이 기존 <code>GLOB_RECURSE</code>에 자동으로 포함됩니다.
+  </div>
+  <div class="decision">
+    <strong>미종료 리터럴 복구</strong><br>
+    닫는 <code>"</code>/<code>'</code> 없이 줄 끝을 만나면 해당 라인을 string span으로 처리하고
+    다음 줄부터 CODE 상태로 복귀합니다. 컴파일 에러에 해당하는 상황을 시각적으로 올바르게 표현합니다.
+  </div>
+
+  <hr>
+
+  <!-- ══ IMPLEMENTATION UNITS ══ -->
+  <h2 id="units">구현 단위 (Implementation Units)</h2>
+
+  <!-- U1 -->
+  <div class="unit">
+    <div class="unit-header">
+      <span class="unit-id">U1</span>
+      <span class="unit-title">SyntaxHighlighter — state machine 스캐너</span>
+    </div>
+    <div class="unit-body">
+      <div class="unit-field">
+        <div class="unit-field-label">목표</div>
+        <p>파일 전체를 스캔하는 state machine을 구현합니다. 주석, 문자열, 전처리기, keyword, 숫자, 연산자, bracket을 커버하는 per-line SpanList map을 반환합니다.</p>
+      </div>
+      <div class="card-grid">
+        <div class="unit-field">
+          <div class="unit-field-label">요구사항</div>
+          <div class="req-badges">
+            <span class="req-badge">R1</span><span class="req-badge">R2</span>
+            <span class="req-badge">R3</span><span class="req-badge">R4</span>
+            <span class="req-badge">R5</span><span class="req-badge">R6</span>
+            <span class="req-badge">R7</span><span class="req-badge">R9</span>
+          </div>
+        </div>
+        <div class="unit-field">
+          <div class="unit-field-label">의존성</div>
+          <div class="dep-badges"><span class="dep-badge none">없음</span></div>
+        </div>
+      </div>
+      <div class="unit-field">
+        <div class="unit-field-label">파일</div>
+        <div class="file-list">
+          <div class="file-item"><span class="file-badge create">CREATE</span>src/drivers/SyntaxHighlighter.hpp</div>
+          <div class="file-item"><span class="file-badge test">TEST</span>tests/unit/test_SyntaxHighlighter.cpp</div>
+        </div>
+      </div>
+      <div class="unit-field">
+        <div class="unit-field-label">구현 방법</div>
+        <ul>
+          <li>공개 free function: <code>highlight_file(std::string_view source)</code> → <code>std::unordered_map&lt;std::size_t, SpanList&gt;</code></li>
+          <li><code>SpanList</code> alias를 헤더에 정의 — test에서 renderer internals 없이 사용 가능</li>
+          <li>문자 단위 순회, <code>\n</code>마다 <code>line</code>·<code>col</code> 카운터 초기화</li>
+          <li>Keyword 매칭: CODE 상태에서 식별자 전체를 읽어 <code>std::unordered_set</code>에서 확인</li>
+          <li>숫자 매칭: 숫자 또는 <code>0x</code>/<code>0b</code> 프리픽스 → suffix까지 읽기</li>
+          <li>연산자: longest-match 테이블 (<code>&gt;&gt;=</code>, <code>&lt;&lt;=</code>, <code>-&gt;*</code>… 순)</li>
+          <li>Bracket: <code>({[]})에서</code> 단일 문자</li>
+          <li>전처리기: col 0의 <code>#</code> → <code>include</code>면 <code>&lt;…&gt;</code>/<code>"…"</code>를 "string" span으로 추가</li>
+        </ul>
+      </div>
+      <div class="unit-field">
+        <div class="unit-field-label">테스트 시나리오</div>
+        <div class="scenario-list">
+
+          <div class="scenario happy">
+            <div class="s-cat">Happy path</div>
+            <div class="s-text"><code>// this is a comment</code> → col 0, 전체 길이, type <code>"comment"</code> span 1개</div>
+          </div>
+          <div class="scenario happy">
+            <div class="s-cat">Happy path</div>
+            <div class="s-text"><code>/* block */</code> 단일 라인 → <code>/* block */</code> 전체 커버하는 span</div>
+          </div>
+          <div class="scenario happy">
+            <div class="s-cat">Happy path — 여러 줄 블록 주석</div>
+            <div class="s-text"><code>/* block\n   continues */</code> → 0번 줄: <code>[0, EOL)</code> comment, 1번 줄: <code>[0, */ 이후)</code> comment</div>
+          </div>
+          <div class="scenario happy">
+            <div class="s-cat">Happy path</div>
+            <div class="s-text"><code>"hello world"</code> → 단일 string span</div>
+          </div>
+          <div class="scenario happy">
+            <div class="s-cat">Happy path</div>
+            <div class="s-text"><code>'x'</code> → 단일 char span (type <code>"string"</code>)</div>
+          </div>
+          <div class="scenario happy">
+            <div class="s-cat">Happy path</div>
+            <div class="s-text"><code>#include &lt;cstdlib&gt;</code> → <code>#include</code>에 preprocessor span, <code>&lt;cstdlib&gt;</code>에 string span</div>
+          </div>
+          <div class="scenario happy">
+            <div class="s-cat">Happy path</div>
+            <div class="s-text"><code>#define FOO 42</code> → 라인 전체를 커버하는 preprocessor span 1개</div>
+          </div>
+          <div class="scenario happy">
+            <div class="s-cat">Happy path — keyword 전수 검증</div>
+            <div class="s-text"><code>int</code>, <code>const</code>, <code>return</code>, <code>auto</code>, <code>namespace</code>, <code>class</code>, <code>struct</code>, <code>if</code>, <code>for</code>, <code>while</code>, <code>nullptr</code>, <code>constexpr</code>, <code>noexcept</code>, <code>template</code>, <code>typename</code>, <code>using</code>, <code>operator</code>, <code>public</code>, <code>private</code>, <code>protected</code>… → 각각 올바른 col·length로 <code>"keyword"</code> span</div>
+          </div>
+          <div class="scenario happy">
+            <div class="s-cat">Happy path — 숫자</div>
+            <div class="s-text"><code>42</code>, <code>3.14</code>, <code>0xFF</code>, <code>0b1010</code>, <code>1ULL</code>, <code>1.5f</code> → 각각 <code>"number"</code> span</div>
+          </div>
+          <div class="scenario happy">
+            <div class="s-cat">Happy path — 단일 연산자</div>
+            <div class="s-text"><code>+</code> <code>-</code> <code>*</code> <code>/</code> <code>%</code> <code>=</code> <code>&lt;</code> <code>&gt;</code> <code>!</code> <code>&amp;</code> <code>|</code> <code>^</code> <code>~</code> → 각각 단일 문자 <code>"syn_operator"</code> span</div>
+          </div>
+          <div class="scenario happy">
+            <div class="s-cat">Happy path — compound 연산자</div>
+            <div class="s-text"><code>&lt;&lt;</code> <code>&gt;&gt;</code> <code>-&gt;</code> <code>::</code> <code>&lt;=</code> <code>&gt;=</code> <code>!=</code> <code>==</code> <code>&amp;&amp;</code> <code>||</code> <code>++</code> <code>--</code> → 각각 2자 <code>"syn_operator"</code> span (longest-match)</div>
+          </div>
+          <div class="scenario happy">
+            <div class="s-cat">Happy path — longest-match</div>
+            <div class="s-text"><code>&gt;&gt;=</code> → 3자 span 1개 (NOT <code>&gt;&gt;</code> + <code>=</code> 두 개)</div>
+          </div>
+          <div class="scenario happy">
+            <div class="s-cat">Happy path</div>
+            <div class="s-text"><code>( ) { } [ ]</code> → 각각 개별 <code>"bracket"</code> span</div>
+          </div>
+
+          <div class="scenario edge">
+            <div class="s-cat">Edge — 컨텍스트 격리</div>
+            <div class="s-text"><code>std::cout &lt;&lt; "// not a comment";</code> → 문자열 안의 <code>//</code>는 comment span이 아님</div>
+          </div>
+          <div class="scenario edge">
+            <div class="s-cat">Edge — 컨텍스트 격리</div>
+            <div class="s-text"><code>std::cout &lt;&lt; "hello"; // real comment</code> → <code>"hello"</code>는 string span, <code>// real comment</code>는 comment span</div>
+          </div>
+          <div class="scenario edge">
+            <div class="s-cat">Edge — 컨텍스트 격리</div>
+            <div class="s-text"><code>/* comment with "string inside" */</code> → comment span 1개; 내부에 string span 없음</div>
+          </div>
+          <div class="scenario edge">
+            <div class="s-cat">Edge — escape</div>
+            <div class="s-text"><code>"escape: \""</code> → escape된 따옴표가 string을 종료하지 않음; 전체가 string span</div>
+          </div>
+          <div class="scenario edge">
+            <div class="s-cat">Edge — escape</div>
+            <div class="s-text"><code>'\\' + x</code> → <code>'\\'</code>만 char span; <code>+</code>는 이후 연산자 span</div>
+          </div>
+          <div class="scenario edge">
+            <div class="s-cat">Edge — 미종료 문자열</div>
+            <div class="s-text"><code>"unterminated</code> (닫는 <code>"</code> 없음) → string span이 EOL까지; 다음 줄은 CODE로 시작</div>
+          </div>
+          <div class="scenario edge">
+            <div class="s-cat">Edge — 미종료 블록 주석</div>
+            <div class="s-text"><code>/* unclosed</code> (<code>*/</code> 없음) → EOF까지 comment span</div>
+          </div>
+          <div class="scenario edge">
+            <div class="s-cat">Edge — keyword 접두사</div>
+            <div class="s-text"><code>integer</code>, <code>constexpr_value</code> → keyword span이 아님 (전체 식별자 검사)</div>
+          </div>
+          <div class="scenario edge">
+            <div class="s-cat">Edge — 주석 내부 keyword</div>
+            <div class="s-text"><code>// keyword int const</code> → comment span 1개; 내부에 keyword span 없음</div>
+          </div>
+          <div class="scenario edge">
+            <div class="s-cat">Edge</div>
+            <div class="s-text"><code>0xFF + 0b1010</code> → number span 2개, 사이에 operator span 1개</div>
+          </div>
+
+          <div class="scenario error">
+            <div class="s-cat">경계값</div>
+            <div class="s-text">빈 source string → 빈 map 반환 (크래시 없음)</div>
+          </div>
+          <div class="scenario error">
+            <div class="s-cat">경계값</div>
+            <div class="s-text"><code>\n</code> 한 글자만 → 빈 map</div>
+          </div>
+          <div class="scenario error">
+            <div class="s-cat">경계값</div>
+            <div class="s-text">공백만 있는 라인 → 빈 SpanList</div>
+          </div>
+
+        </div>
+      </div>
+      <div class="unit-field">
+        <div class="unit-field-label">완료 조건</div>
+        <ul>
+          <li><code>ctest -R SyntaxHighlighter</code> 전체 통과</li>
+          <li><code>SyntaxHighlighter.hpp</code>에 FTXUI·LspService 헤더 include 없음</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- U2 -->
+  <div class="unit">
+    <div class="unit-header">
+      <span class="unit-id">U2</span>
+      <span class="unit-title">token_color — "preprocessor", "bracket", "syn_operator" 색상 추가</span>
+    </div>
+    <div class="unit-body">
+      <div class="unit-field">
+        <div class="unit-field-label">목표</div>
+        <p>3개의 신규 syntactic type string이 시각적으로 구별되는 색상을 갖도록 색상 매핑을 확장합니다.</p>
+      </div>
+      <div class="card-grid">
+        <div class="unit-field">
+          <div class="unit-field-label">요구사항</div>
+          <div class="req-badges">
+            <span class="req-badge">R1</span><span class="req-badge">R2</span>
+            <span class="req-badge">R3</span><span class="req-badge">R4</span>
+            <span class="req-badge">R5</span><span class="req-badge">R6</span>
+            <span class="req-badge">R7</span>
+          </div>
+        </div>
+        <div class="unit-field">
+          <div class="unit-field-label">의존성</div>
+          <div class="dep-badges"><span class="dep-badge">U1</span></div>
+        </div>
+      </div>
+      <div class="unit-field">
+        <div class="unit-field-label">파일</div>
+        <div class="file-list">
+          <div class="file-item"><span class="file-badge modify">MODIFY</span>src/drivers/FtxuiRenderer.cpp</div>
+        </div>
+      </div>
+      <div class="unit-field">
+        <div class="unit-field-label">구현 방법</div>
+        <ul>
+          <li><code>token_color()</code>의 <code>return Default</code> 앞에 3개 분기 추가</li>
+          <li><code>"preprocessor"</code> → <code>ftxui::Color::BlueLight</code></li>
+          <li><code>"bracket"</code> → <code>ftxui::Color::White</code></li>
+          <li><code>"syn_operator"</code> → <code>ftxui::Color::Cyan</code></li>
+          <li><code>token_color</code>와 <code>colorize_line</code> 그 외 부분은 변경 없음</li>
+        </ul>
+      </div>
+      <div class="unit-field">
+        <div class="unit-field-label">테스트 시나리오</div>
+        <p style="color:var(--text-muted);font-size:13px">
+          Test expectation: none — 색상 매핑은 단순 lookup이며, U3 merge 통합 테스트와 에디터 실행으로 시각 검증합니다.
+        </p>
+      </div>
+      <div class="unit-field">
+        <div class="unit-field-label">완료 조건</div>
+        <ul><li><code>cmake --build build</code> 경고 없이 성공</li></ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- U3 -->
+  <div class="unit">
+    <div class="unit-header">
+      <span class="unit-id">U3</span>
+      <span class="unit-title">render_buffer — syntactic + LSP span map merge (LSP 우선)</span>
+    </div>
+    <div class="unit-body">
+      <div class="unit-field">
+        <div class="unit-field-label">목표</div>
+        <p><code>highlight_file</code>을 <code>render_buffer()</code>에 연결하고, LSP span이 겹치는 syntactic span을 덮어쓰는 merge를 적용한 뒤 <code>colorize_line</code>에 전달합니다.</p>
+      </div>
+      <div class="card-grid">
+        <div class="unit-field">
+          <div class="unit-field-label">요구사항</div>
+          <div class="req-badges"><span class="req-badge">R8</span><span class="req-badge">R10</span></div>
+        </div>
+        <div class="unit-field">
+          <div class="unit-field-label">의존성</div>
+          <div class="dep-badges"><span class="dep-badge">U1</span><span class="dep-badge">U2</span></div>
+        </div>
+      </div>
+      <div class="unit-field">
+        <div class="unit-field-label">파일</div>
+        <div class="file-list">
+          <div class="file-item"><span class="file-badge modify">MODIFY</span>src/drivers/FtxuiRenderer.cpp</div>
+          <div class="file-item"><span class="file-badge test">TEST</span>tests/unit/test_SyntaxHighlighter.cpp (merge 테스트 추가)</div>
+        </div>
+      </div>
+      <div class="unit-field">
+        <div class="unit-field-label">구현 방법</div>
+        <ul>
+          <li><code>render_buffer()</code> 호출 시 <code>highlight_file(buf.to_string())</code>을 한 번 실행</li>
+          <li>각 라인 <code>i</code>에서: <code>merged = regex_map[i]</code>로 시작</li>
+          <li>해당 라인의 각 LSP span에 대해 겹치는 merged span을 trim/제거 후 LSP span 삽입</li>
+          <li><code>merged</code>를 col 기준 재정렬</li>
+          <li><code>colorize_line</code>에 <code>merged</code> 전달 (기존 <code>token_map[i]</code> 대신)</li>
+          <li><code>colorize_line</code> 시그니처·구현 <strong>변경 없음</strong></li>
+        </ul>
+      </div>
+      <div class="unit-field">
+        <div class="unit-field-label">테스트 시나리오 (merge 로직)</div>
+        <div class="scenario-list">
+          <div class="scenario merge">
+            <div class="s-cat">Merge</div>
+            <div class="s-text">LSP <code>[5,8)</code>이 syn <code>[5,8)</code>과 완전 일치 → 출력에 LSP span만 존재</div>
+          </div>
+          <div class="scenario merge">
+            <div class="s-cat">Merge — 왼쪽 trim</div>
+            <div class="s-text">LSP <code>[5,8)</code> ∩ syn <code>[3,7)</code> → syn은 <code>[3,5)</code>로 trim, LSP <code>[5,8)</code> 삽입</div>
+          </div>
+          <div class="scenario merge">
+            <div class="s-cat">Merge — 오른쪽 trim</div>
+            <div class="s-text">LSP <code>[5,8)</code> ∩ syn <code>[6,10)</code> → syn은 <code>[8,10)</code>으로 trim, LSP <code>[5,8)</code> 삽입</div>
+          </div>
+          <div class="scenario merge">
+            <div class="s-cat">Merge — 완전 포함</div>
+            <div class="s-text">LSP <code>[5,8)</code> ⊇ syn <code>[6,7)</code> → syn span 완전 제거</div>
+          </div>
+          <div class="scenario merge">
+            <div class="s-cat">Merge — 겹침 없음</div>
+            <div class="s-text">LSP <code>[5,8)</code>, syn <code>[0,3)</code> → 둘 다 보존, col 순 정렬</div>
+          </div>
+          <div class="scenario merge">
+            <div class="s-cat">Merge — 복수 LSP span</div>
+            <div class="s-text">동일 라인에 LSP span 여러 개, 각각 다른 syn span과 겹침 → 모두 정확히 처리, 출력 col 정렬·겹침 없음</div>
+          </div>
+          <div class="scenario merge">
+            <div class="s-cat">Merge — syntactic만 존재</div>
+            <div class="s-text">해당 라인에 LSP span 없음 → syntactic span 그대로 통과</div>
+          </div>
+          <div class="scenario merge">
+            <div class="s-cat">Merge — LSP만 존재</div>
+            <div class="s-text">해당 라인에 syntactic span 없음 → LSP span 그대로 통과</div>
+          </div>
+        </div>
+      </div>
+      <div class="unit-field">
+        <div class="unit-field-label">완료 조건</div>
+        <ul>
+          <li><code>ctest -R SyntaxHighlighter</code> 전체 통과</li>
+          <li><code>cmake --build build --target editor</code> 성공</li>
+          <li><code>./build/editor src/main.cpp</code> 실행 시 keyword·주석·전처리기·문자열 색상 표출, <code>::</code> 연산자 색상 표출, LSP 식별자는 LSP 색상 유지</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- U4 -->
+  <div class="unit">
+    <div class="unit-header">
+      <span class="unit-id">U4</span>
+      <span class="unit-title">디버그 코드 정리 · 전체 테스트 통과 · commit &amp; push</span>
+    </div>
+    <div class="unit-body">
+      <div class="unit-field">
+        <div class="unit-field-label">목표</div>
+        <p>클린 상태, 200+N개 테스트 전체 통과, <code>feat/lsp-e2e-tests</code>에 push.</p>
+      </div>
+      <div class="card-grid">
+        <div class="unit-field">
+          <div class="unit-field-label">요구사항</div>
+          <div class="req-badges"><span class="req-badge">R1–R11</span></div>
+        </div>
+        <div class="unit-field">
+          <div class="unit-field-label">의존성</div>
+          <div class="dep-badges">
+            <span class="dep-badge">U1</span>
+            <span class="dep-badge">U2</span>
+            <span class="dep-badge">U3</span>
+          </div>
+        </div>
+      </div>
+      <div class="unit-field">
+        <div class="unit-field-label">진행 방법</div>
+        <ul>
+          <li><code>src/core/usecases/LspService.cpp</code>의 임시 <code>#include &lt;fstream&gt;</code> 및 legend dump 블록 잔존 여부 확인 후 제거</li>
+          <li><code>ctest --output-on-failure</code> 실행 — 200+N개 전체 통과 확인</li>
+          <li><code>[FEAT][HIGHLIGHT]</code> 접두사로 commit</li>
+          <li>remote push</li>
+        </ul>
+      </div>
+      <div class="unit-field">
+        <div class="unit-field-label">테스트 시나리오</div>
+        <p style="color:var(--text-muted);font-size:13px">Test expectation: none — 검증 및 commit 전용 unit.</p>
+      </div>
+      <div class="unit-field">
+        <div class="unit-field-label">완료 조건</div>
+        <ul>
+          <li><code>git push</code> 성공</li>
+          <li>PR #15에 신규 커밋 반영</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <hr>
+
+  <!-- ══ SYSTEM-WIDE IMPACT ══ -->
+  <h2 id="impact">시스템 전체 영향</h2>
+  <div class="impact-grid">
+    <div class="impact-item">
+      <div class="impact-title">성능</div>
+      <code>render_buffer()</code>가 렌더 프레임마다 O(n) 스캔을 한 번 추가 실행합니다. ~40줄 파일에서는 무시 가능하며, 대용량 파일에서 지연이 느껴질 경우에만 프로파일링합니다.
+    </div>
+    <div class="impact-item">
+      <div class="impact-title">오류 전파</div>
+      <code>highlight_file</code>은 빈 입력에 빈 map을 반환하며 예외를 던지지 않습니다. <code>render_buffer</code>는 syntactic map이 비어도 LSP-only highlighting으로 gracefully fallback합니다.
+    </div>
+    <div class="impact-item">
+      <div class="impact-title">스레드 안전성</div>
+      <code>highlight_file</code>은 공유 상태 없는 순수 함수입니다. mutex·locking 불필요.
+    </div>
+    <div class="impact-item">
+      <div class="impact-title">변경되지 않는 불변식</div>
+      <code>colorize_line</code> 시그니처, cursor 주입 로직, 기존 LSP overlay 렌더링 (diagnostics, hover, completion, locations, symbols, inlay hints) 전부 변경 없음.
+    </div>
+    <div class="impact-item">
+      <div class="impact-title">API 표면</div>
+      <code>colorize_line</code>·<code>token_color</code>는 anonymous namespace에 존재. 외부 호출자 없음.
+    </div>
+    <div class="impact-item">
+      <div class="impact-title">통합 커버리지</div>
+      U3의 merge unit test가 live renderer·FTXUI screen 없이 syntactic + LSP 상호작용을 검증합니다.
+    </div>
+  </div>
+
+  <hr>
+
+  <!-- ══ RISKS ══ -->
+  <h2 id="risks">리스크 &amp; 완화 방안</h2>
+  <table>
+    <thead>
+      <tr><th>리스크</th><th>완화 방안</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>State machine이 <code>\\</code> escape를 잘못 처리해 라인 나머지가 잘못된 색상으로 표출</td>
+        <td>Unit test: <code>"escape: \""</code>, <code>'\\'</code> 케이스; STRING/CHAR skip 로직에 한정된 수정</td>
+      </tr>
+      <tr>
+        <td>여러 줄에 걸친 블록 주석이 O(n²) span-list 증가를 유발</td>
+        <td>라인마다 별도 span entry를 가지므로 비용은 O(주석 줄 수); 이차 성장 없음</td>
+      </tr>
+      <tr>
+        <td>Merge 로직이 LSP span 대신 syntactic span을 살리는 우선순위 역전 버그</td>
+        <td>U3 merge unit test가 LSP span 생존·syntactic span trim을 명시적으로 단언</td>
+      </tr>
+      <tr>
+        <td>대용량 파일에서 렌더 지연이 눈에 띄게 증가</td>
+        <td>단일 O(n) 패스; 사용자가 지연을 보고할 때만 프로파일링</td>
+      </tr>
+      <tr>
+        <td><code>highlight_file</code>이 <code>\r\n</code> 줄 끝으로 호출됨</td>
+        <td>CODE 상태에서 <code>\r</code>를 공백으로 취급; <code>\n</code>을 항상 라인 경계로 사용</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <hr>
+
+  <!-- ══ SOURCES ══ -->
+  <h2 id="sources">참고 자료</h2>
+  <ul>
+    <li>관련 코드: <code>src/drivers/FtxuiRenderer.cpp</code> — <code>render_buffer()</code>, <code>colorize_line()</code>, <code>token_color()</code></li>
+    <li>관련 코드: <code>src/core/usecases/LspService.hpp</code> — <code>LspSemanticToken</code> struct</li>
+    <li>관련 코드: <code>src/drivers/ScreenFormat.hpp</code> — driver 레이어 header-only 패턴</li>
+    <li>관련 PR: <code>feat/lsp-e2e-tests</code> (#15)</li>
+    <li>clangd semantic token legend (런타임, Apple clangd 17): 25개 타입 — <code>keyword</code>·<code>comment</code>는 설계상 미포함</li>
+  </ul>
+
+</div>
+</body>
+</html>

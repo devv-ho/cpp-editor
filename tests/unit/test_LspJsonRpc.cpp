@@ -138,3 +138,26 @@ TEST(LspDecoderTest, PopulatesResultAndErrorFields) {
     EXPECT_TRUE(msg->result.contains("capabilities"));
     EXPECT_TRUE(msg->error.is_null());
 }
+
+TEST(LspDecoderTest, MalformedJsonBodyYieldsEmptyMessage) {
+    // "hello" is not valid JSON; decoder must not crash and must consume the message.
+    std::string wire = "Content-Length: 5\r\n\r\nhello";
+    LspDecoder decoder;
+    decoder.feed(wire);
+    // next_message() returns a value (consumed) but with no id and empty method.
+    auto msg = decoder.next_message();
+    ASSERT_TRUE(msg.has_value());
+    EXPECT_FALSE(msg->id.has_value());
+    EXPECT_TRUE(msg->method.empty());
+}
+
+TEST(LspDecoderTest, EmptyJsonObjectBodyYieldsEmptyMessage) {
+    std::string payload = "{}";
+    std::string wire = std::format("Content-Length: {}\r\n\r\n{}", payload.size(), payload);
+    LspDecoder decoder;
+    decoder.feed(wire);
+    auto msg = decoder.next_message();
+    ASSERT_TRUE(msg.has_value());
+    EXPECT_FALSE(msg->id.has_value());
+    EXPECT_TRUE(msg->method.empty());
+}

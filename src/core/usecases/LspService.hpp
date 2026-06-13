@@ -39,6 +39,15 @@ struct LspCompletionItem {
     std::string detail;
 };
 
+// One LSP TextEdit (range replacement).
+struct LspTextEdit {
+    std::size_t start_line;
+    std::size_t start_col;
+    std::size_t end_line;
+    std::size_t end_col;
+    std::string new_text;
+};
+
 // One code action.
 struct LspCodeAction {
     std::string title;
@@ -163,6 +172,10 @@ public:
 
     void clear_overlay();  // clears hover, signature, locations, completion
 
+    // Pending text edits produced by formatting/rename, consumed by the UI thread.
+    // Returns the edits and clears the pending list atomically.
+    std::vector<LspTextEdit> take_pending_edits();
+
     // Called from the UI thread after setup. cb is invoked from the LSP
     // dispatch thread whenever overlay data or diagnostics change, so the
     // renderer can request a screen refresh without polling.
@@ -178,6 +191,7 @@ public:
     static std::vector<LspCodeAction> parse_code_actions(const nlohmann::json& j);
     static std::vector<LspDocumentSymbol> parse_symbols(const nlohmann::json& j);
     static std::vector<LspInlayHint> parse_inlay_hints(const nlohmann::json& j);
+    static std::vector<LspTextEdit> parse_text_edits(const nlohmann::json& j);
     std::vector<LspSemanticToken> parse_semantic_tokens(const nlohmann::json& j) const;
 
 private:
@@ -205,6 +219,7 @@ private:
     std::vector<LspInlayHint> inlay_hints_;
     std::vector<LspLocation> highlights_;
     std::vector<LspSemanticToken> semantic_tokens_;
+    std::vector<LspTextEdit> pending_edits_;  // formatting/rename edits, consumed by UI thread
 
     // Token type legend received from clangd's initialize response.
     std::vector<std::string> semantic_token_types_;

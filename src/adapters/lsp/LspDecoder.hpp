@@ -71,6 +71,9 @@ private:
         auto json = nlohmann::json::parse(body, nullptr, /*allow_exceptions=*/false);
 
         LspMessage msg;
+        if (json.is_discarded() || !json.is_object()) {
+            return msg;
+        }
         if (json.contains("id") && json["id"].is_number_integer()) {
             msg.id = json["id"].get<int>();
         }

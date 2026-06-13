@@ -2,7 +2,6 @@
 
 #include <unistd.h>
 
-#include <fstream>
 #include <string_view>
 
 #include "adapters/lsp/LspEncoder.hpp"
@@ -427,11 +426,6 @@ void LspService::handshake() {
                      semantic_token_types_.clear();
                      for (const auto& t : legend["tokenTypes"])
                          semantic_token_types_.push_back(t.get<std::string>());
-                     {
-                         std::ofstream f("/tmp/legend.log");
-                         for (std::size_t i = 0; i < semantic_token_types_.size(); ++i)
-                             f << i << " " << semantic_token_types_[i] << "\n";
-                     }
                  });
     send_notification("initialized", nlohmann::json::object());
 }

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -373,6 +374,38 @@ inline std::unordered_map<std::size_t, SpanList> highlight_file(std::string_view
         emit(span_line, span_col, line, col, "char");
 
     return result;
+}
+
+// Merges syntactic spans with LSP spans on a single line; LSP wins on any overlap.
+// Both inputs must be sorted by col. Output is sorted by col, non-overlapping.
+inline SpanList merge_spans(SpanList syn, const SpanList& lsp) {
+    for (const auto& [lc, ll] : lsp) {
+        std::size_t lsp_start = lc;
+        std::size_t lsp_end = lc + ll.first;
+
+        SpanList next;
+        next.reserve(syn.size() + 1);
+
+        for (auto& [sc, sl] : syn) {
+            std::size_t syn_start = sc;
+            std::size_t syn_end = sc + sl.first;
+
+            if (syn_end <= lsp_start || syn_start >= lsp_end) {
+                next.emplace_back(sc, sl);
+                continue;
+            }
+            if (syn_start < lsp_start)
+                next.emplace_back(syn_start, std::make_pair(lsp_start - syn_start, sl.second));
+            if (syn_end > lsp_end)
+                next.emplace_back(lsp_end, std::make_pair(syn_end - lsp_end, sl.second));
+        }
+
+        next.emplace_back(lc, ll);
+        std::sort(next.begin(), next.end(),
+                  [](const auto& a, const auto& b) { return a.first < b.first; });
+        syn = std::move(next);
+    }
+    return syn;
 }
 
 }  // namespace editor::drivers

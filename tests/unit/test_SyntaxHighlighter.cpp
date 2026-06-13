@@ -463,3 +463,131 @@ TEST(SyntaxHighlighter, PreprocessorAtEOF) {
     auto r = highlight_file("#pragma once");
     EXPECT_TRUE(has_type(r, 0, "preprocessor"));
 }
+
+// ── merge_spans ───────────────────────────────────────────────────────────
+
+static SpanList make_span(std::size_t col, std::size_t len, const std::string& type) {
+    return {{col, {len, type}}};
+}
+
+TEST(MergeSpans, NoOverlapLspAfterSyn) {
+    // syn [0,3) "keyword", lsp [5,8) "function" — no overlap, both survive.
+    SpanList syn = {{0, {3, "keyword"}}};
+    SpanList lsp = {{5, {3, "function"}}};
+    auto r = merge_spans(syn, lsp);
+    ASSERT_EQ(r.size(), 2u);
+    EXPECT_EQ(r[0].first, 0u);
+    EXPECT_EQ(r[0].second.second, "keyword");
+    EXPECT_EQ(r[1].first, 5u);
+    EXPECT_EQ(r[1].second.second, "function");
+}
+
+TEST(MergeSpans, NoOverlapLspBeforeSyn) {
+    SpanList syn = {{5, {3, "keyword"}}};
+    SpanList lsp = {{0, {3, "function"}}};
+    auto r = merge_spans(syn, lsp);
+    ASSERT_EQ(r.size(), 2u);
+    EXPECT_EQ(r[0].first, 0u);
+    EXPECT_EQ(r[0].second.second, "function");
+    EXPECT_EQ(r[1].first, 5u);
+    EXPECT_EQ(r[1].second.second, "keyword");
+}
+
+TEST(MergeSpans, LspFullyCoversSyn) {
+    // lsp [5,8) fully covers syn [5,8) → syn dropped, lsp survives.
+    SpanList syn = {{5, {3, "keyword"}}};
+    SpanList lsp = {{5, {3, "function"}}};
+    auto r = merge_spans(syn, lsp);
+    ASSERT_EQ(r.size(), 1u);
+    EXPECT_EQ(r[0].second.second, "function");
+}
+
+TEST(MergeSpans, LspCoversLeftOfSyn) {
+    // syn [3,7), lsp [5,8) → syn trimmed to [3,5), lsp [5,8) inserted.
+    SpanList syn = {{3, {4, "keyword"}}};
+    SpanList lsp = {{5, {3, "function"}}};
+    auto r = merge_spans(syn, lsp);
+    ASSERT_EQ(r.size(), 2u);
+    EXPECT_EQ(r[0].first, 3u);
+    EXPECT_EQ(r[0].second.first, 2u);  // length trimmed to 2
+    EXPECT_EQ(r[0].second.second, "keyword");
+    EXPECT_EQ(r[1].first, 5u);
+    EXPECT_EQ(r[1].second.second, "function");
+}
+
+TEST(MergeSpans, LspCoversRightOfSyn) {
+    // syn [6,10), lsp [5,8) → syn trimmed to [8,10), lsp [5,8) inserted.
+    SpanList syn = {{6, {4, "keyword"}}};
+    SpanList lsp = {{5, {3, "function"}}};
+    auto r = merge_spans(syn, lsp);
+    ASSERT_EQ(r.size(), 2u);
+    EXPECT_EQ(r[0].first, 5u);
+    EXPECT_EQ(r[0].second.second, "function");
+    EXPECT_EQ(r[1].first, 8u);
+    EXPECT_EQ(r[1].second.first, 2u);  // length trimmed to 2
+    EXPECT_EQ(r[1].second.second, "keyword");
+}
+
+TEST(MergeSpans, LspContainedInsideSyn) {
+    // syn [3,10), lsp [5,8) inside → syn dropped entirely, lsp inserted.
+    SpanList syn = {{3, {7, "keyword"}}};
+    SpanList lsp = {{5, {3, "function"}}};
+    auto r = merge_spans(syn, lsp);
+    // syn [3,5) left fragment + lsp [5,8) + syn [8,10) right fragment
+    ASSERT_EQ(r.size(), 3u);
+    EXPECT_EQ(r[0].first, 3u);
+    EXPECT_EQ(r[0].second.first, 2u);
+    EXPECT_EQ(r[0].second.second, "keyword");
+    EXPECT_EQ(r[1].first, 5u);
+    EXPECT_EQ(r[1].second.second, "function");
+    EXPECT_EQ(r[2].first, 8u);
+    EXPECT_EQ(r[2].second.first, 2u);
+    EXPECT_EQ(r[2].second.second, "keyword");
+}
+
+TEST(MergeSpans, MultipleLspSpansOnSameLine) {
+    // syn [0,4) "keyword", [6,10) "number"
+    // lsp [1,3) "function", [7,9) "type"
+    SpanList syn = {{0, {4, "keyword"}}, {6, {4, "number"}}};
+    SpanList lsp = {{1, {2, "function"}}, {7, {2, "type"}}};
+    auto r = merge_spans(syn, lsp);
+    // After lsp[0]: syn [0,1), lsp[0] [1,3), syn [3,4)  +  syn [6,10) untouched
+    // After lsp[1]: syn [6,7), lsp[1] [7,9), syn [9,10)
+    // Final sorted: [0,1)"keyword", [1,3)"function", [3,4)"keyword",
+    //               [6,7)"number",  [7,9)"type",     [9,10)"number"
+    ASSERT_EQ(r.size(), 6u);
+    EXPECT_EQ(r[0].first, 0u);
+    EXPECT_EQ(r[0].second.second, "keyword");
+    EXPECT_EQ(r[1].first, 1u);
+    EXPECT_EQ(r[1].second.second, "function");
+    EXPECT_EQ(r[2].first, 3u);
+    EXPECT_EQ(r[2].second.second, "keyword");
+    EXPECT_EQ(r[3].first, 6u);
+    EXPECT_EQ(r[3].second.second, "number");
+    EXPECT_EQ(r[4].first, 7u);
+    EXPECT_EQ(r[4].second.second, "type");
+    EXPECT_EQ(r[5].first, 9u);
+    EXPECT_EQ(r[5].second.second, "number");
+}
+
+TEST(MergeSpans, OnlySynSpans) {
+    SpanList syn = {{0, {3, "keyword"}}, {5, {2, "number"}}};
+    SpanList lsp = {};
+    auto r = merge_spans(syn, lsp);
+    ASSERT_EQ(r.size(), 2u);
+    EXPECT_EQ(r[0].second.second, "keyword");
+    EXPECT_EQ(r[1].second.second, "number");
+}
+
+TEST(MergeSpans, OnlyLspSpans) {
+    SpanList syn = {};
+    SpanList lsp = {{2, {4, "function"}}};
+    auto r = merge_spans(syn, lsp);
+    ASSERT_EQ(r.size(), 1u);
+    EXPECT_EQ(r[0].second.second, "function");
+}
+
+TEST(MergeSpans, BothEmpty) {
+    auto r = merge_spans({}, {});
+    EXPECT_TRUE(r.empty());
+}

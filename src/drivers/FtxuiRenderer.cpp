@@ -125,12 +125,14 @@ ftxui::Element FtxuiRenderer::render_buffer() const {
     auto highlights = lsp_.highlights();
     auto sem_tokens = lsp_.semantic_tokens();
 
-    // Build a per-line map: line -> sorted list of (col, (length, type)).
+    // Syntactic highlighting: single O(n) pass over the whole file.
+    auto syn_map = highlight_file(buf.to_string());
+
+    // Build LSP per-line map (already sorted by line then col from clangd).
     using SpanList = std::vector<std::pair<std::size_t, std::pair<std::size_t, std::string>>>;
-    std::unordered_map<std::size_t, SpanList> token_map;
+    std::unordered_map<std::size_t, SpanList> lsp_map;
     for (const auto& tok : sem_tokens)
-        token_map[tok.line].emplace_back(tok.col, std::make_pair(tok.length, tok.token_type));
-    // Spans are emitted in LSP order (already sorted by line then col).
+        lsp_map[tok.line].emplace_back(tok.col, std::make_pair(tok.length, tok.token_type));
 
     std::vector<ftxui::Element> lines;
     lines.reserve(buf.line_count());
@@ -146,13 +148,18 @@ ftxui::Element FtxuiRenderer::render_buffer() const {
             }
         }
 
-        const SpanList empty_spans;
-        const SpanList& spans = token_map.count(i) ? token_map.at(i) : empty_spans;
+        // Merge: start from syntactic spans, let LSP overwrite on overlap.
+        SpanList syn_spans = syn_map.count(i) ? syn_map.at(i) : SpanList{};
+        std::sort(syn_spans.begin(), syn_spans.end(),
+                  [](const auto& a, const auto& b) { return a.first < b.first; });
+
+        const SpanList& lsp_spans = lsp_map.count(i) ? lsp_map.at(i) : SpanList{};
+        SpanList merged = merge_spans(std::move(syn_spans), lsp_spans);
 
         std::optional<std::size_t> cur =
             (i == cursor_line) ? std::optional{cursor_col} : std::nullopt;
 
-        auto elem = colorize_line(line_text, spans, cur);
+        auto elem = colorize_line(line_text, merged, cur);
         if (is_highlighted) elem = elem | ftxui::bgcolor(ftxui::Color::GrayDark);
         lines.push_back(elem);
     }

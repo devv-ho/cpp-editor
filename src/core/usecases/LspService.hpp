@@ -172,6 +172,14 @@ public:
 
     const EditorConfig& config() const { return config_; }
 
+    // Parse helpers exposed for unit testing.
+    static std::vector<LspLocation> parse_locations(const nlohmann::json& j);
+    static std::vector<LspCompletionItem> parse_completion(const nlohmann::json& j);
+    static std::vector<LspCodeAction> parse_code_actions(const nlohmann::json& j);
+    static std::vector<LspDocumentSymbol> parse_symbols(const nlohmann::json& j);
+    static std::vector<LspInlayHint> parse_inlay_hints(const nlohmann::json& j);
+    std::vector<LspSemanticToken> parse_semantic_tokens(const nlohmann::json& j) const;
+
 private:
     std::unique_ptr<editor::adapters::lsp::ClangdProcess> process_;
     EditorConfig config_;
@@ -216,14 +224,6 @@ private:
     // Helpers for building common LSP param structures.
     static nlohmann::json text_document_position(const std::string& uri, std::size_t line,
                                                  std::size_t col);
-
-    // Parse helpers.
-    static std::vector<LspLocation> parse_locations(const nlohmann::json& j);
-    static std::vector<LspCompletionItem> parse_completion(const nlohmann::json& j);
-    static std::vector<LspCodeAction> parse_code_actions(const nlohmann::json& j);
-    static std::vector<LspDocumentSymbol> parse_symbols(const nlohmann::json& j);
-    static std::vector<LspInlayHint> parse_inlay_hints(const nlohmann::json& j);
-    std::vector<LspSemanticToken> parse_semantic_tokens(const nlohmann::json& j) const;
 };
 
 }  // namespace editor::core::usecases

@@ -313,68 +313,87 @@ std::vector<LspLocation> LspService::highlights() const {
 
 // ── Overlay setters ───────────────────────────────────────────────────────────
 
-void LspService::set_on_update(std::function<void()> cb) { on_update_ = std::move(cb); }
+void LspService::set_on_update(std::function<void()> cb) {
+    std::lock_guard lock(overlay_mutex_);
+    on_update_ = std::move(cb);
+}
 
 std::vector<LspSemanticToken> LspService::semantic_tokens() const {
     std::lock_guard lock(overlay_mutex_);
     return semantic_tokens_;
 }
 void LspService::set_semantic_tokens(std::vector<LspSemanticToken> tokens) {
+    std::function<void()> cb;
     {
         std::lock_guard lock(overlay_mutex_);
         semantic_tokens_ = std::move(tokens);
+        cb = on_update_;
     }
-    if (on_update_) on_update_();
+    if (cb) cb();
 }
 
 void LspService::set_hover(std::string text) {
+    std::function<void()> cb;
     {
         std::lock_guard lock(overlay_mutex_);
         hover_text_ = std::move(text);
+        cb = on_update_;
     }
-    if (on_update_) on_update_();
+    if (cb) cb();
 }
 void LspService::set_signature(std::string text) {
+    std::function<void()> cb;
     {
         std::lock_guard lock(overlay_mutex_);
         signature_text_ = std::move(text);
+        cb = on_update_;
     }
-    if (on_update_) on_update_();
+    if (cb) cb();
 }
 void LspService::set_locations(std::vector<LspLocation> locs) {
+    std::function<void()> cb;
     {
         std::lock_guard lock(overlay_mutex_);
         locations_ = std::move(locs);
+        cb = on_update_;
     }
-    if (on_update_) on_update_();
+    if (cb) cb();
 }
 void LspService::set_completion(std::vector<LspCompletionItem> items) {
+    std::function<void()> cb;
     {
         std::lock_guard lock(overlay_mutex_);
         completion_items_ = std::move(items);
+        cb = on_update_;
     }
-    if (on_update_) on_update_();
+    if (cb) cb();
 }
 void LspService::set_symbols(std::vector<LspDocumentSymbol> syms) {
+    std::function<void()> cb;
     {
         std::lock_guard lock(overlay_mutex_);
         symbols_ = std::move(syms);
+        cb = on_update_;
     }
-    if (on_update_) on_update_();
+    if (cb) cb();
 }
 void LspService::set_inlay_hints(std::vector<LspInlayHint> hints) {
+    std::function<void()> cb;
     {
         std::lock_guard lock(overlay_mutex_);
         inlay_hints_ = std::move(hints);
+        cb = on_update_;
     }
-    if (on_update_) on_update_();
+    if (cb) cb();
 }
 void LspService::set_highlights(std::vector<LspLocation> locs) {
+    std::function<void()> cb;
     {
         std::lock_guard lock(overlay_mutex_);
         highlights_ = std::move(locs);
+        cb = on_update_;
     }
-    if (on_update_) on_update_();
+    if (cb) cb();
 }
 void LspService::clear_overlay() {
     std::lock_guard lock(overlay_mutex_);
@@ -382,6 +401,10 @@ void LspService::clear_overlay() {
     signature_text_.clear();
     locations_.clear();
     completion_items_.clear();
+    symbols_.clear();
+    inlay_hints_.clear();
+    highlights_.clear();
+    semantic_tokens_.clear();
 }
 
 // ── Internal ──────────────────────────────────────────────────────────────────
@@ -490,11 +513,16 @@ void LspService::handle_diagnostics(const nlohmann::json& params) {
         diags.push_back(std::move(diag));
     }
 
+    std::function<void()> cb;
     {
         std::lock_guard lock(diagnostics_mutex_);
         diagnostics_[uri] = std::move(diags);
     }
-    if (on_update_) on_update_();
+    {
+        std::lock_guard lock(overlay_mutex_);
+        cb = on_update_;
+    }
+    if (cb) cb();
     // publishDiagnostics means clangd finished analysing the file -- safe to
     // request semantic tokens now (legend is also guaranteed to be stored).
     if (config_.lsp.semantic_tokens)
@@ -600,6 +628,10 @@ std::vector<LspInlayHint> LspService::parse_inlay_hints(const nlohmann::json& j)
         if (h.contains("position")) {
             hint.line = h["position"]["line"].get<std::size_t>();
             hint.col = h["position"]["character"].get<std::size_t>();
+        }
+        if (!h.contains("label")) {
+            result.push_back(std::move(hint));
+            continue;
         }
         const auto& lbl = h["label"];
         if (lbl.is_string())

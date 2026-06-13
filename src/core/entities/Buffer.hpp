@@ -138,6 +138,51 @@ public:
         return {};
     }
 
+    // Applies one LSP TextEdit: replaces [start_line:start_col, end_line:end_col)
+    // with new_text (which may contain '\n' for multi-line replacements).
+    //
+    // Callers applying multiple edits MUST call this in reverse document order
+    // (highest line/col first) so earlier edits don't shift later offsets.
+    void apply_text_edit(std::size_t start_line, std::size_t start_col, std::size_t end_line,
+                         std::size_t end_col, std::string_view new_text) {
+        // Clamp to valid range.
+        start_line = std::min(start_line, lines_.size() > 0 ? lines_.size() - 1 : 0);
+        end_line = std::min(end_line, lines_.size() > 0 ? lines_.size() - 1 : 0);
+        start_col = std::min(start_col, lines_[start_line].size());
+        end_col = std::min(end_col, lines_[end_line].size());
+
+        // Collect the text that survives before the range and after the range.
+        std::string prefix = lines_[start_line].substr(0, start_col);
+        std::string suffix = lines_[end_line].substr(end_col);
+
+        // Remove lines in [start_line, end_line].
+        lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(start_line),
+                     lines_.begin() + static_cast<std::ptrdiff_t>(end_line) + 1);
+
+        // Split new_text on '\n' and insert the replacement lines.
+        std::vector<std::string> replacement;
+        std::size_t pos = 0;
+        while (true) {
+            auto nl = new_text.find('\n', pos);
+            if (nl == std::string_view::npos) {
+                replacement.emplace_back(new_text.substr(pos));
+                break;
+            }
+            replacement.emplace_back(new_text.substr(pos, nl - pos));
+            pos = nl + 1;
+        }
+
+        // Attach prefix/suffix to the first/last replacement line.
+        replacement.front() = prefix + replacement.front();
+        replacement.back() += suffix;
+
+        lines_.insert(lines_.begin() + static_cast<std::ptrdiff_t>(start_line), replacement.begin(),
+                      replacement.end());
+
+        // Maintain invariant: never empty.
+        if (lines_.empty()) lines_.emplace_back("");
+    }
+
 private:
     // Invariant: lines_ is never empty. Both constructors guarantee at least one element.
     std::vector<std::string> lines_;

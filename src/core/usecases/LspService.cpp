@@ -268,7 +268,18 @@ void LspService::formatting(const std::string& uri, FormattingCallback cb) {
     nlohmann::json params = {{"textDocument", {{"uri", uri}}},
                              {"options", {{"tabSize", 4}, {"insertSpaces", true}}}};
     send_request("textDocument/formatting", params,
-                 [cb = std::move(cb)](const nlohmann::json& result) { cb(result); });
+                 [this, cb = std::move(cb)](const nlohmann::json& result) {
+                     // Store edits for the UI thread to apply via take_pending_edits().
+                     auto edits = parse_text_edits(result);
+                     std::function<void()> notify;
+                     {
+                         std::lock_guard lock(overlay_mutex_);
+                         pending_edits_ = std::move(edits);
+                         notify = on_update_;
+                     }
+                     if (notify) notify();
+                     cb(result);
+                 });
 }
 
 // ── Diagnostics ───────────────────────────────────────────────────────────────
@@ -405,6 +416,11 @@ void LspService::clear_overlay() {
     inlay_hints_.clear();
     highlights_.clear();
     semantic_tokens_.clear();
+}
+
+std::vector<LspTextEdit> LspService::take_pending_edits() {
+    std::lock_guard lock(overlay_mutex_);
+    return std::move(pending_edits_);
 }
 
 // ── Internal ──────────────────────────────────────────────────────────────────
@@ -641,6 +657,24 @@ std::vector<LspInlayHint> LspService::parse_inlay_hints(const nlohmann::json& j)
                 if (part.contains("value")) hint.label += part["value"].get<std::string>();
         }
         result.push_back(std::move(hint));
+    }
+    return result;
+}
+
+std::vector<LspTextEdit> LspService::parse_text_edits(const nlohmann::json& j) {
+    std::vector<LspTextEdit> result;
+    if (!j.is_array()) return result;
+    for (const auto& e : j) {
+        if (!e.contains("range") || !e.contains("newText")) continue;
+        const auto& range = e["range"];
+        if (!range.contains("start") || !range.contains("end")) continue;
+        LspTextEdit edit;
+        edit.start_line = range["start"]["line"].get<std::size_t>();
+        edit.start_col = range["start"]["character"].get<std::size_t>();
+        edit.end_line = range["end"]["line"].get<std::size_t>();
+        edit.end_col = range["end"]["character"].get<std::size_t>();
+        edit.new_text = e["newText"].get<std::string>();
+        result.push_back(std::move(edit));
     }
     return result;
 }

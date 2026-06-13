@@ -735,3 +735,84 @@ TEST(LspServiceGatingTest, DisabledDidCloseIsNoOp) {
     auto lsp = make_null_lsp(cfg);
     EXPECT_NO_THROW(lsp->did_close("file:///x.cpp"));
 }
+
+// ── parse_text_edits ──────────────────────────────────────────────────────────
+
+TEST(LspServiceParseTest, ParseTextEditsEmptyArrayReturnsEmpty) {
+    EXPECT_TRUE(LspService::parse_text_edits(nlohmann::json::array()).empty());
+}
+
+TEST(LspServiceParseTest, ParseTextEditsNonArrayReturnsEmpty) {
+    EXPECT_TRUE(LspService::parse_text_edits(nlohmann::json::object()).empty());
+}
+
+TEST(LspServiceParseTest, ParseTextEditsSingleEdit) {
+    nlohmann::json j = nlohmann::json::array();
+    nlohmann::json edit;
+    edit["range"]["start"]["line"] = 0;
+    edit["range"]["start"]["character"] = 4;
+    edit["range"]["end"]["line"] = 0;
+    edit["range"]["end"]["character"] = 8;
+    edit["newText"] = "void";
+    j.push_back(edit);
+
+    auto edits = LspService::parse_text_edits(j);
+    ASSERT_EQ(edits.size(), 1u);
+    EXPECT_EQ(edits[0].start_line, 0u);
+    EXPECT_EQ(edits[0].start_col, 4u);
+    EXPECT_EQ(edits[0].end_line, 0u);
+    EXPECT_EQ(edits[0].end_col, 8u);
+    EXPECT_EQ(edits[0].new_text, "void");
+}
+
+TEST(LspServiceParseTest, ParseTextEditsMultilineEdit) {
+    nlohmann::json j = nlohmann::json::array();
+    nlohmann::json edit;
+    edit["range"]["start"]["line"] = 1;
+    edit["range"]["start"]["character"] = 0;
+    edit["range"]["end"]["line"] = 3;
+    edit["range"]["end"]["character"] = 2;
+    edit["newText"] = "x\ny";
+    j.push_back(edit);
+
+    auto edits = LspService::parse_text_edits(j);
+    ASSERT_EQ(edits.size(), 1u);
+    EXPECT_EQ(edits[0].start_line, 1u);
+    EXPECT_EQ(edits[0].end_line, 3u);
+    EXPECT_EQ(edits[0].new_text, "x\ny");
+}
+
+TEST(LspServiceParseTest, ParseTextEditsMissingRangeSkipsEntry) {
+    nlohmann::json j = nlohmann::json::array();
+    nlohmann::json bad;
+    bad["newText"] = "foo";  // no "range" field
+    j.push_back(bad);
+    EXPECT_TRUE(LspService::parse_text_edits(j).empty());
+}
+
+TEST(LspServiceParseTest, ParseTextEditsMissingNewTextSkipsEntry) {
+    nlohmann::json j = nlohmann::json::array();
+    nlohmann::json bad;
+    bad["range"]["start"]["line"] = 0;
+    bad["range"]["start"]["character"] = 0;
+    bad["range"]["end"]["line"] = 0;
+    bad["range"]["end"]["character"] = 1;
+    // no "newText"
+    j.push_back(bad);
+    EXPECT_TRUE(LspService::parse_text_edits(j).empty());
+}
+
+TEST(LspServiceParseTest, ParseTextEditsEmptyNewTextAllowed) {
+    nlohmann::json j = nlohmann::json::array();
+    nlohmann::json edit;
+    edit["range"]["start"]["line"] = 0;
+    edit["range"]["start"]["character"] = 0;
+    edit["range"]["end"]["line"] = 0;
+    edit["range"]["end"]["character"] = 5;
+    edit["newText"] = "";
+    j.push_back(edit);
+
+    auto edits = LspService::parse_text_edits(j);
+    ASSERT_EQ(edits.size(), 1u);
+    EXPECT_EQ(edits[0].new_text, "");
+}

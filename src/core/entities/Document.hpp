@@ -30,6 +30,7 @@ public:
     // -- Buffer access ---------------------------------------------------------
 
     [[nodiscard]] const Buffer& buffer() const noexcept { return buffer_; }
+    [[nodiscard]] Buffer& buffer() noexcept { return buffer_; }
 
     [[nodiscard]] std::size_t line_count() const noexcept { return buffer_.line_count(); }
 

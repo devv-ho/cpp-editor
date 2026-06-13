@@ -4,6 +4,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace editor::drivers {
@@ -28,39 +29,39 @@ using SpanList = std::vector<std::pair<std::size_t, std::pair<std::size_t, std::
 // FtxuiRenderer). This function is unaware of LSP.
 inline std::unordered_map<std::size_t, SpanList> highlight_file(std::string_view source) {
     // ── Keyword set ────────────────────────────────────────────────────────
-    static const std::unordered_map<std::string, bool> kKeywords = {
-        {"alignas", true},       {"alignof", true},     {"and", true},
-        {"and_eq", true},        {"asm", true},         {"auto", true},
-        {"bitand", true},        {"bitor", true},       {"bool", true},
-        {"break", true},         {"case", true},        {"catch", true},
-        {"char", true},          {"char8_t", true},     {"char16_t", true},
-        {"char32_t", true},      {"class", true},       {"compl", true},
-        {"concept", true},       {"const", true},       {"consteval", true},
-        {"constexpr", true},     {"constinit", true},   {"const_cast", true},
-        {"continue", true},      {"co_await", true},    {"co_return", true},
-        {"co_yield", true},      {"decltype", true},    {"default", true},
-        {"delete", true},        {"do", true},          {"double", true},
-        {"dynamic_cast", true},  {"else", true},        {"enum", true},
-        {"explicit", true},      {"export", true},      {"extern", true},
-        {"false", true},         {"float", true},       {"for", true},
-        {"friend", true},        {"goto", true},        {"if", true},
-        {"inline", true},        {"int", true},         {"long", true},
-        {"mutable", true},       {"namespace", true},   {"new", true},
-        {"noexcept", true},      {"not", true},         {"not_eq", true},
-        {"nullptr", true},       {"operator", true},    {"or", true},
-        {"or_eq", true},         {"private", true},     {"protected", true},
-        {"public", true},        {"register", true},    {"reinterpret_cast", true},
-        {"requires", true},      {"return", true},      {"short", true},
-        {"signed", true},        {"sizeof", true},      {"static", true},
-        {"static_assert", true}, {"static_cast", true}, {"struct", true},
-        {"switch", true},        {"template", true},    {"this", true},
-        {"thread_local", true},  {"throw", true},       {"true", true},
-        {"try", true},           {"typedef", true},     {"typeid", true},
-        {"typename", true},      {"union", true},       {"unsigned", true},
-        {"using", true},         {"virtual", true},     {"void", true},
-        {"volatile", true},      {"wchar_t", true},     {"while", true},
-        {"xor", true},           {"xor_eq", true},      {"override", true},
-        {"final", true},         {"import", true},      {"module", true},
+    static const std::unordered_set<std::string> kKeywords = {
+        "alignas",       "alignof",     "and",
+        "and_eq",        "asm",         "auto",
+        "bitand",        "bitor",       "bool",
+        "break",         "case",        "catch",
+        "char",          "char8_t",     "char16_t",
+        "char32_t",      "class",       "compl",
+        "concept",       "const",       "consteval",
+        "constexpr",     "constinit",   "const_cast",
+        "continue",      "co_await",    "co_return",
+        "co_yield",      "decltype",    "default",
+        "delete",        "do",          "double",
+        "dynamic_cast",  "else",        "enum",
+        "explicit",      "export",      "extern",
+        "false",         "float",       "for",
+        "friend",        "goto",        "if",
+        "inline",        "int",         "long",
+        "mutable",       "namespace",   "new",
+        "noexcept",      "not",         "not_eq",
+        "nullptr",       "operator",    "or",
+        "or_eq",         "private",     "protected",
+        "public",        "register",    "reinterpret_cast",
+        "requires",      "return",      "short",
+        "signed",        "sizeof",      "static",
+        "static_assert", "static_cast", "struct",
+        "switch",        "template",    "this",
+        "thread_local",  "throw",       "true",
+        "try",           "typedef",     "typeid",
+        "typename",      "union",       "unsigned",
+        "using",         "virtual",     "void",
+        "volatile",      "wchar_t",     "while",
+        "xor",           "xor_eq",      "override",
+        "final",         "import",      "module",
     };
 
     // ── Operator / bracket sets ────────────────────────────────────────────
@@ -68,8 +69,8 @@ inline std::unordered_map<std::size_t, SpanList> highlight_file(std::string_view
 
     // Multi-char operators (longest first, important for correct tokenisation).
     static const std::vector<std::string> kMultiOps = {
-        "<<=", ">>=", "...", "<=>", "==", "!=", "<=", ">=", "&&", "||", "++", "--", "+=",
-        "-=",  "*=",  "/=",  "%=",  "&=", "|=", "^=", "<<", ">>", "->", "::", ".*", "->*",
+        "<<=", ">>=", "...", "<=>", "==", "!=", "<=", ">=", "&&", "||",  "++", "--", "+=",
+        "-=",  "*=",  "/=",  "%=",  "&=", "|=", "^=", "<<", ">>", "->*", "->", "::", ".*",
     };
     static const std::string kSingleOps = "+-*/%&|^~!<>=,.:;?";
 
@@ -401,8 +402,8 @@ inline SpanList merge_spans(SpanList syn, const SpanList& lsp) {
         }
 
         next.emplace_back(lc, ll);
-        std::sort(next.begin(), next.end(),
-                  [](const auto& a, const auto& b) { return a.first < b.first; });
+        std::stable_sort(next.begin(), next.end(),
+                         [](const auto& a, const auto& b) { return a.first < b.first; });
         syn = std::move(next);
     }
     return syn;

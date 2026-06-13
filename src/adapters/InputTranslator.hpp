@@ -20,14 +20,13 @@ namespace editor::adapters {
 //   i/a           -- enter insert / insert-after
 //   gd            -- lsp_definition
 //   gD            -- lsp_declaration
-//   gi            -- lsp_implementation
+//   gI            -- lsp_implementation ('i' = enter_insert; uppercase avoids collision)
 //   gy            -- lsp_type_definition
 //   gr            -- lsp_references
 //   K             -- lsp_hover
-//   <Space>rn     -- lsp_rename      (pending_space -> 'r' -> 'n')
-//   <Space>ca     -- lsp_code_action (pending_space -> 'c' -> 'a')
-//   <Space>f      -- lsp_formatting
-//   <Space>s      -- lsp_document_symbol
+//   <Space>rn     -- lsp_rename      (pending_space -> 'r' -> 'n'; currently no-ops until prompt
+//   wired) <Space>cA     -- lsp_code_action (pending_space -> 'c' -> 'A'; uppercase avoids
+//   'a'=enter_insert_after) <Space>f      -- lsp_formatting <Space>s      -- lsp_document_symbol
 //   <Space>S      -- lsp_workspace_symbol
 //   ESC           -- quit (Normal) / enter_normal (Insert)
 [[nodiscard]] inline std::optional<core::Command> translate(const ftxui::Event& event,
@@ -58,12 +57,15 @@ namespace editor::adapters {
         if (ch == "K") return core::Command::lsp_hover;
         if (ch == " ") return core::Command::pending_space;
         // Second keys of multi-key sequences (resolved by dispatcher state machine).
-        if (ch == "d") return core::Command::lsp_definition;        // gd
-        if (ch == "D") return core::Command::lsp_declaration;       // gD
+        if (ch == "d") return core::Command::lsp_definition;   // gd
+        if (ch == "D") return core::Command::lsp_declaration;  // gD
+        if (ch == "I")
+            return core::Command::lsp_implementation;  // gI (uppercase; 'i' = enter_insert)
         if (ch == "y") return core::Command::lsp_type_definition;   // gy
         if (ch == "r") return core::Command::lsp_references;        // gr  / <Space>r(n)
         if (ch == "n") return core::Command::lsp_rename;            // <Space>rn
-        if (ch == "c") return core::Command::lsp_code_action;       // <Space>c(a)
+        if (ch == "c") return core::Command::lsp_code_action;       // <Space>c(A)
+        if (ch == "A") return core::Command::lsp_code_action;       // <Space>cA confirm key
         if (ch == "f") return core::Command::lsp_formatting;        // <Space>f
         if (ch == "s") return core::Command::lsp_document_symbol;   // <Space>s
         if (ch == "S") return core::Command::lsp_workspace_symbol;  // <Space>S

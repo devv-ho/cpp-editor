@@ -16,15 +16,16 @@ namespace editor::core {
 //   idle  --'g'-->  after_g   --'g'-->  move_top
 //                             --'d'-->  lsp_definition
 //                             --'D'-->  lsp_declaration
-//                             --'i'-->  lsp_implementation
+//                             --'I'-->  lsp_implementation  (uppercase; 'i' = enter_insert)
 //                             --'y'-->  lsp_type_definition
 //                             --'r'-->  lsp_references
 //                             --else--> idle
 //   idle  --' '---> after_spc --'f'-->  lsp_formatting
 //                             --'s'-->  lsp_document_symbol
 //                             --'S'-->  lsp_workspace_symbol
-//                             --'r'-->  after_spc_r --'n'--> lsp_rename
-//                             --'c'-->  after_spc_c --'a'--> lsp_code_action
+//                             --'r'-->  after_spc_r --'n'--> lsp_rename (no-op until prompt wired)
+//                             --'c'-->  after_spc_c --'A'--> lsp_code_action  (uppercase; 'a' =
+//                             enter_insert_after)
 //                             --else--> idle
 class InputDispatcher {
 public:
@@ -46,7 +47,7 @@ private:
     void reset_pending() { pending_ = PendingState::None; }
 
     EditorMode dispatch_normal(Command cmd, Document& doc) {
-        auto pos = doc.cursor().position();
+        auto pos = doc.position();
 
         // ── Resolve multi-key sequences ───────────────────────────────────────
         switch (pending_) {
@@ -99,10 +100,8 @@ private:
 
             case PendingState::AfterSpaceR:
                 reset_pending();
-                if (cmd == Command::lsp_rename) {
-                    // new_name will be provided by the UI layer once a prompt is wired up.
-                    lsp_.rename(uri_, pos.line, pos.col, "", [](const nlohmann::json&) {});
-                }
+                // lsp_rename intentionally no-ops until a name-prompt UI is wired up.
+                // Sending an empty newName to clangd would corrupt symbols.
                 return EditorMode::Normal;
 
             case PendingState::AfterSpaceC:

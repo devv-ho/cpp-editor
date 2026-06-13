@@ -129,7 +129,6 @@ ftxui::Element FtxuiRenderer::render_buffer() const {
     auto syn_map = highlight_file(buf.to_string());
 
     // Build LSP per-line map (already sorted by line then col from clangd).
-    using SpanList = std::vector<std::pair<std::size_t, std::pair<std::size_t, std::string>>>;
     std::unordered_map<std::size_t, SpanList> lsp_map;
     for (const auto& tok : sem_tokens)
         lsp_map[tok.line].emplace_back(tok.col, std::make_pair(tok.length, tok.token_type));
@@ -149,9 +148,8 @@ ftxui::Element FtxuiRenderer::render_buffer() const {
         }
 
         // Merge: start from syntactic spans, let LSP overwrite on overlap.
+        // highlight_file emits spans in column order; no sort needed.
         SpanList syn_spans = syn_map.count(i) ? syn_map.at(i) : SpanList{};
-        std::sort(syn_spans.begin(), syn_spans.end(),
-                  [](const auto& a, const auto& b) { return a.first < b.first; });
 
         const SpanList& lsp_spans = lsp_map.count(i) ? lsp_map.at(i) : SpanList{};
         SpanList merged = merge_spans(std::move(syn_spans), lsp_spans);

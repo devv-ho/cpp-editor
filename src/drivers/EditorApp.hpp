@@ -22,6 +22,7 @@ public:
     void run();
 
 private:
+    void apply_pending_edits();
     core::Document& doc_;
     core::usecases::LspService& lsp_;
     std::string uri_;

@@ -1,9 +1,11 @@
 #include "drivers/EditorApp.hpp"
 
+#include <algorithm>
 #include <ftxui/component/component.hpp>
 #include <ftxui/component/event.hpp>
 #include <ftxui/screen/terminal.hpp>
 
+#include "core/usecases/EditorCommands.hpp"
 #include "core/usecases/EditorMode.hpp"
 
 namespace editor::drivers {
@@ -32,6 +34,8 @@ void EditorApp::run() {
 
     auto component = ftxui::CatchEvent(ftxui::Renderer(render_fn),
                                        [this, &current_mode](const ftxui::Event& event) {
+                                           // Apply any pending formatting edits on the UI thread.
+                                           apply_pending_edits();
                                            auto result = input_.process(event, doc_);
                                            current_mode = result.mode;
                                            if (result.quit) {
@@ -41,6 +45,23 @@ void EditorApp::run() {
                                        });
 
     screen_.Loop(component);
+}
+
+void EditorApp::apply_pending_edits() {
+    auto edits = lsp_.take_pending_edits();
+    if (edits.empty()) return;
+    // Apply in reverse document order so earlier edits don't shift later offsets.
+    std::sort(edits.begin(), edits.end(), [](const auto& a, const auto& b) {
+        if (a.start_line != b.start_line) return a.start_line > b.start_line;
+        return a.start_col > b.start_col;
+    });
+    for (const auto& e : edits) {
+        doc_.buffer().apply_text_edit(e.start_line, e.start_col, e.end_line, e.end_col, e.new_text);
+    }
+    // Clamp cursor after edits may have reduced the buffer.
+    auto line = std::min(doc_.position().line, doc_.buffer().line_count() - 1);
+    doc_.cursor().set_position({line, 0});
+    core::commands::clamp_normal(doc_);
 }
 
 }  // namespace editor::drivers

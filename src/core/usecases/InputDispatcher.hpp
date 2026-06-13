@@ -80,6 +80,8 @@ private:
                 reset_pending();
                 switch (cmd) {
                     case Command::lsp_formatting:
+                        // LspService stores edits in pending_edits_ and triggers on_update_.
+                        // EditorApp's Custom event handler calls apply_pending_edits().
                         lsp_.formatting(uri_, [](const nlohmann::json&) {});
                         return EditorMode::Normal;
                     case Command::lsp_document_symbol:
